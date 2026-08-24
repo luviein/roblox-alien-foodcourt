@@ -29,24 +29,26 @@ local BOB_HEIGHT = 0.11    -- vertical lift per step, applied by the caller
 -- around: exactly the symptom that looked like "animation is broken".
 --
 -- Canonical name -> the spellings it may appear under, most specific first.
+-- Third spelling in each list is the body part the joint moves: skinned rigs
+-- often name the bone after the part rather than the joint.
 local ALIASES = {
-	Neck          = { "Neck" },
-	Waist         = { "Waist" },
-	LeftShoulder  = { "LeftShoulder", "Left Shoulder" },
-	RightShoulder = { "RightShoulder", "Right Shoulder" },
-	LeftElbow     = { "LeftElbow" },       -- R15 only; no-ops on R6
-	RightElbow    = { "RightElbow" },
-	LeftHip       = { "LeftHip", "Left Hip" },
-	RightHip      = { "RightHip", "Right Hip" },
-	LeftKnee      = { "LeftKnee" },        -- R15 only
-	RightKnee     = { "RightKnee" },
+	Neck          = { "Neck", "Head" },
+	Waist         = { "Waist", "UpperTorso" },
+	LeftShoulder  = { "LeftShoulder", "Left Shoulder", "LeftUpperArm" },
+	RightShoulder = { "RightShoulder", "Right Shoulder", "RightUpperArm" },
+	LeftElbow     = { "LeftElbow", "LeftLowerArm" },   -- R15 only; no-ops on R6
+	RightElbow    = { "RightElbow", "RightLowerArm" },
+	LeftHip       = { "LeftHip", "Left Hip", "LeftUpperLeg" },
+	RightHip      = { "RightHip", "Right Hip", "RightUpperLeg" },
+	LeftKnee      = { "LeftKnee", "LeftLowerLeg" },    -- R15 only
+	RightKnee     = { "RightKnee", "RightLowerLeg" },
 }
 
 -- Without hips there is nothing worth calling a walk.
 local REQUIRED = { "LeftHip", "RightHip" }
 
 export type Rig = {
-	joints: { [string]: { motor: Motor6D, base: CFrame } },
+	joints: { [string]: { apply: (CFrame) -> (), clear: () -> () } },
 	phase: number,
 }
 
@@ -115,7 +117,8 @@ function NpcAnimator.buildJoints(model: Model): (number, string)
 		elseif not childPart:IsA("BasePart") then
 			table.insert(notes, jointName .. ":childIs" .. childPart.ClassName)
 		elseif childPart:FindFirstChild(jointName) then
-			table.insert(notes, jointName .. ":exists")
+			local existing = childPart:FindFirstChild(jointName) :: Instance
+			table.insert(notes, jointName .. ":exists(" .. existing.ClassName .. ")")
 		end
 
 		if parentPart and childPart
@@ -178,29 +181,62 @@ end
 -- connected them. Kept as a hook in case a rig does need correcting.
 local REST_OFFSET = {}
 
+-- Two kinds of skeleton pose two different ways, so each joint carries its own
+-- setter rather than the animation code branching on type everywhere.
+--
+--   Motor6D : classic rig. Pose by offsetting C0 from its resting value.
+--   Bone    : skinned rig. Pose by writing Transform, which is already
+--             relative to the bind pose, so there is no base to offset from.
+--
+-- Writing C0 on a skinned rig does nothing at all, which is exactly the
+-- failure that made these customers look like an animation bug.
+local function jointHandle(instance: Instance, rest: CFrame?)
+	if instance:IsA("Motor6D") then
+		local base = instance.C0 * (rest or CFrame.identity)
+		return {
+			apply = function(offset: CFrame)
+				instance.C0 = base * offset
+			end,
+			clear = function()
+				instance.C0 = base
+			end,
+		}
+	elseif instance:IsA("Bone") then
+		local base = rest or CFrame.identity
+		return {
+			apply = function(offset: CFrame)
+				instance.Transform = base * offset
+			end,
+			clear = function()
+				instance.Transform = base
+			end,
+		}
+	end
+	return nil
+end
+
 function NpcAnimator.bind(model: Model, tPosed: boolean?): Rig?
-	-- Index every Motor6D by its actual name first, then resolve canonical
+	-- Index every poseable joint by its actual name, then resolve canonical
 	-- names through the alias table.
 	local found = {}
 	local names = {}
 	for _, descendant in model:GetDescendants() do
-		if descendant:IsA("Motor6D") then
+		if descendant:IsA("Motor6D") or descendant:IsA("Bone") then
 			found[descendant.Name] = descendant
-			table.insert(names, descendant.Name)
+			table.insert(names, descendant.ClassName .. ":" .. descendant.Name)
 		end
 	end
 
 	local joints = {}
 	for canonical, spellings in ALIASES do
 		for _, spelling in spellings do
-			local motor = found[spelling]
-			if motor then
-				local rest = if tPosed then REST_OFFSET[canonical] else nil
-				joints[canonical] = {
-					motor = motor,
-					base = motor.C0 * (rest or CFrame.identity),
-				}
-				break
+			local instance = found[spelling]
+			if instance then
+				local handle = jointHandle(instance, if tPosed then REST_OFFSET[canonical] else nil)
+				if handle then
+					joints[canonical] = handle
+					break
+				end
 			end
 		end
 	end
@@ -219,7 +255,7 @@ local function setAngle(rig: Rig, name: string, x: number, y: number, z: number)
 	if not joint then
 		return
 	end
-	joint.motor.C0 = joint.base * CFrame.Angles(x, y, z)
+	joint.apply(CFrame.Angles(x, y, z))
 end
 
 -- Advances the walk cycle and returns the vertical bob for this frame, so the
@@ -319,7 +355,7 @@ end
 -- Puts every joint back where the rig was built, for exits and cleanup.
 function NpcAnimator.reset(rig: Rig)
 	for _, joint in rig.joints do
-		joint.motor.C0 = joint.base
+		joint.clear()
 	end
 end
 
