@@ -65,6 +65,10 @@ local active: { [number]: any } = {}
 local nextSeed = 1
 local warnedNoJoints = false
 
+-- Draws the first customer's body composition on screen. Turn off once the
+-- rig pipeline is settled.
+local DEBUG_BODY = true
+
 -- ------------------------------------------------------------- billboard ---
 
 local function make(className: string, props: { [string]: any }, parent: Instance?): any
@@ -277,7 +281,7 @@ local function buildRigCustomer()
 	-- Joint driver. Returns nil if this is not an R15 rig, in which case the
 	-- customer simply stands still rather than erroring.
 	-- true: catalog rigs arrive T-posed and need the rest offset applied.
-	local rig = NpcAnimator.bind(model, true)
+	local rig, jointNames = NpcAnimator.bind(model, true)
 	if not rig and not warnedNoJoints then
 		warnedNoJoints = true
 		local found = {}
@@ -324,6 +328,7 @@ local function buildRigCustomer()
 		yOffset = yOffset,
 		highlight = highlight,
 		rig = rig,
+		jointNames = jointNames,
 		face = drawnFace,
 	}
 end
@@ -352,27 +357,65 @@ local function buildAlienCustomer()
 		highlight = highlight,
 		-- false: the alien is authored with its arms already down.
 		rig = NpcAnimator.bind(alien.model, false),
+		jointNames = nil,
 		face = Face.attach(alien.head),
 	}
 end
 
 local reportedFirst = false
 
+-- Prints AND draws the composition of the first customer. On screen because
+-- every symptom so far -- sliding, T-pose, no face -- looked like an animation
+-- bug while actually being "this body is not what you think it is", and a
+-- screenshot carries the answer where a scrolled-past Output line does not.
+-- Set DEBUG_BODY to false once the rig pipeline is settled.
+local function reportBody(body)
+	local text = ("kind=%s | joints=%s | face=%s | head=%s\nMotor6Ds: %s"):format(
+		body.kind,
+		if body.rig then "BOUND" else "MISSING",
+		if body.face then "drawn" else "MISSING",
+		if body.adornee then body.adornee.Name else "none",
+		if body.jointNames and #body.jointNames > 0
+			then table.concat(body.jointNames, ", ")
+			else "none found"
+	)
+
+	print("[AlienFoodCourt] customer body: " .. text)
+
+	if not DEBUG_BODY then
+		return
+	end
+
+	local player = game:GetService("Players").LocalPlayer
+	local screen = make("ScreenGui", {
+		Name = "AFC_BodyDebug",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		DisplayOrder = 200,
+	}, player:WaitForChild("PlayerGui"))
+
+	local label = make("TextLabel", {
+		BackgroundColor3 = Color3.fromRGB(10, 11, 16),
+		BackgroundTransparency = 0.15,
+		BorderSizePixel = 0,
+		Position = UDim2.fromScale(0.005, 0.12),
+		Size = UDim2.fromScale(0.5, 0.07),
+		Font = Enum.Font.Code,
+		Text = text,
+		TextColor3 = if body.rig then Color3.fromRGB(120, 230, 150) else Color3.fromRGB(255, 120, 110),
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextWrapped = true,
+	}, screen)
+	make("UITextSizeConstraint", { MaxTextSize = 14 }, label)
+end
+
 local function spawnCustomer(order)
 	local body = buildRigCustomer() or buildAlienCustomer()
 
-	-- One line, once, saying exactly what the first customer is made of. Every
-	-- symptom so far -- sliding, no limbs, no face -- looked like an animation
-	-- bug while actually being "this is not the body you think it is".
 	if not reportedFirst then
 		reportedFirst = true
-		print(("[AlienFoodCourt] customer body: kind=%s  joints=%s  face=%s  head=%s")
-			:format(
-				body.kind,
-				if body.rig then "bound" else "MISSING",
-				if body.face then "drawn" else "MISSING",
-				if body.adornee then body.adornee.Name else "none"
-			))
+		reportBody(body)
 	end
 
 	body.model.Parent = scene.folder

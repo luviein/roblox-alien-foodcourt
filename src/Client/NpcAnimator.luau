@@ -23,8 +23,26 @@ local TORSO_TWIST = 0.07   -- waist rotation, keeps it from looking rigid
 local STRIDE_RATE = 9.0    -- radians/sec -- walk cycle speed
 local BOB_HEIGHT = 0.11    -- vertical lift per step, applied by the caller
 
--- R15 rigs carry these Motor6Ds. R6 and the procedural alien have none of
--- them, which is how `bind` decides whether it can animate at all.
+-- R6 and R15 name their joints differently -- R6 uses spaces ("Left Shoulder",
+-- "Left Hip") and R15 does not. Binding only the R15 spellings meant an R6 rig
+-- matched nothing, bound no joints, and stood in its raw T-pose while sliding
+-- around: exactly the symptom that looked like "animation is broken".
+--
+-- Canonical name -> the spellings it may appear under, most specific first.
+local ALIASES = {
+	Neck          = { "Neck" },
+	Waist         = { "Waist" },
+	LeftShoulder  = { "LeftShoulder", "Left Shoulder" },
+	RightShoulder = { "RightShoulder", "Right Shoulder" },
+	LeftElbow     = { "LeftElbow" },       -- R15 only; no-ops on R6
+	RightElbow    = { "RightElbow" },
+	LeftHip       = { "LeftHip", "Left Hip" },
+	RightHip      = { "RightHip", "Right Hip" },
+	LeftKnee      = { "LeftKnee" },        -- R15 only
+	RightKnee     = { "RightKnee" },
+}
+
+-- Without hips there is nothing worth calling a walk.
 local REQUIRED = { "LeftHip", "RightHip" }
 
 export type Rig = {
@@ -45,25 +63,39 @@ local REST_OFFSET = {
 }
 
 function NpcAnimator.bind(model: Model, tPosed: boolean?): Rig?
-	local joints = {}
-
+	-- Index every Motor6D by its actual name first, then resolve canonical
+	-- names through the alias table.
+	local found = {}
+	local names = {}
 	for _, descendant in model:GetDescendants() do
 		if descendant:IsA("Motor6D") then
-			local rest = if tPosed then REST_OFFSET[descendant.Name] else nil
-			joints[descendant.Name] = {
-				motor = descendant,
-				base = descendant.C0 * (rest or CFrame.identity),
-			}
+			found[descendant.Name] = descendant
+			table.insert(names, descendant.Name)
+		end
+	end
+
+	local joints = {}
+	for canonical, spellings in ALIASES do
+		for _, spelling in spellings do
+			local motor = found[spelling]
+			if motor then
+				local rest = if tPosed then REST_OFFSET[canonical] else nil
+				joints[canonical] = {
+					motor = motor,
+					base = motor.C0 * (rest or CFrame.identity),
+				}
+				break
+			end
 		end
 	end
 
 	for _, name in REQUIRED do
 		if not joints[name] then
-			return nil
+			return nil, names
 		end
 	end
 
-	return { joints = joints, phase = 0 }
+	return { joints = joints, phase = 0 }, names
 end
 
 local function setAngle(rig: Rig, name: string, x: number, y: number, z: number)
