@@ -32,12 +32,28 @@ export type Rig = {
 	phase: number,
 }
 
-function NpcAnimator.bind(model: Model): Rig?
+-- R15 rigs built by CreateHumanoidModelFromDescription arrive in a T-pose:
+-- there is no Animate script to settle them into an idle. Every angle we write
+-- is relative to the joint's resting C0, so without correcting that first the
+-- whole animation plays on top of outstretched arms.
+--
+-- Only applies to catalog rigs. The procedural alien is authored with its arms
+-- already down, and would end up in a T-pose if this were applied to it.
+local REST_OFFSET = {
+	LeftShoulder = CFrame.Angles(0, 0, math.rad(80)),
+	RightShoulder = CFrame.Angles(0, 0, math.rad(-80)),
+}
+
+function NpcAnimator.bind(model: Model, tPosed: boolean?): Rig?
 	local joints = {}
 
 	for _, descendant in model:GetDescendants() do
 		if descendant:IsA("Motor6D") then
-			joints[descendant.Name] = { motor = descendant, base = descendant.C0 }
+			local rest = if tPosed then REST_OFFSET[descendant.Name] else nil
+			joints[descendant.Name] = {
+				motor = descendant,
+				base = descendant.C0 * (rest or CFrame.identity),
+			}
 		end
 	end
 

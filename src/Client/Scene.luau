@@ -24,7 +24,9 @@ local CAMERA_POSITION = ORIGIN + Vector3.new(0, 11.5, 15.5)
 local CAMERA_FOCUS    = ORIGIN + Vector3.new(0, 3.0, -4.5)
 
 local COUNTER_TOP = 3.0
-local PLATE_CENTER = ORIGIN + Vector3.new(0, COUNTER_TOP + 0.18, 1.4)
+-- Pushed back from the counter edge: at z=1.4 the plate rendered underneath
+-- the key grid, which occupies the bottom third of the screen.
+local PLATE_CENTER = ORIGIN + Vector3.new(0, COUNTER_TOP + 0.18, -0.4)
 
 local QUEUE_Z = -5.5
 local QUEUE_X = { -6.3, -2.1, 2.1, 6.3 }
@@ -127,8 +129,8 @@ function Scene.build()
 	plateMesh.Parent = plate
 
 	local plateLight = Instance.new("PointLight")
-	plateLight.Brightness = 0.9
-	plateLight.Range = 11
+	plateLight.Brightness = 0.55
+	plateLight.Range = 8
 	plateLight.Color = Color3.fromRGB(255, 240, 214)
 	plateLight.Parent = plate
 

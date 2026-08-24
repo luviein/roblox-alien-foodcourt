@@ -276,7 +276,8 @@ local function buildRigCustomer()
 
 	-- Joint driver. Returns nil if this is not an R15 rig, in which case the
 	-- customer simply stands still rather than erroring.
-	local rig = NpcAnimator.bind(model)
+	-- true: catalog rigs arrive T-posed and need the rest offset applied.
+	local rig = NpcAnimator.bind(model, true)
 	if not rig and not warnedNoJoints then
 		warnedNoJoints = true
 		local found = {}
@@ -349,7 +350,8 @@ local function buildAlienCustomer()
 		billboardOffset = 2.4,
 		yOffset = alien.yOffset,
 		highlight = highlight,
-		rig = NpcAnimator.bind(alien.model),
+		-- false: the alien is authored with its arms already down.
+		rig = NpcAnimator.bind(alien.model, false),
 		face = Face.attach(alien.head),
 	}
 end
