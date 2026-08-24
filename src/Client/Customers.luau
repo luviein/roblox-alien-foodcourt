@@ -37,11 +37,11 @@ local REACT_DURATION = 0.75
 -- How each outcome reads on the customer. Emoji need no asset ids and are
 -- legible at any distance, which face decals are not.
 local REACTIONS = {
-	Perfect = { emoji = "ð¤©", mood = "happy" },
-	Good    = { emoji = "ð", mood = "happy" },
-	Sloppy  = { emoji = "ð", mood = "happy" },
-	Fail    = { emoji = "ð ", mood = "angry" },
-	Expired = { emoji = "ð¡", mood = "angry" },
+	Perfect = { emoji = "🤩", mood = "happy" },
+	Good    = { emoji = "😄", mood = "happy" },
+	Sloppy  = { emoji = "🙂", mood = "happy" },
+	Fail    = { emoji = "😠", mood = "angry" },
+	Expired = { emoji = "😡", mood = "angry" },
 }
 
 local COLOR = {
@@ -83,6 +83,9 @@ local function buildBillboard(adornee: BasePart, heightOffset: number)
 	local gui = make("BillboardGui", {
 		Name = "Ticket",
 		Adornee = adornee,
+		-- Without this, GuiObjects inside a BillboardGui receive no input at
+		-- all: the ticket looked like a button and swallowed every click.
+		Active = true,
 		AlwaysOnTop = true,
 		LightInfluence = 0,
 		Size = UDim2.fromScale(4.4, 3.6),
@@ -641,7 +644,7 @@ local function renderTicket(entry, order, slotIndex: number, snapshot)
 
 		if order.cookState == "raw" then
 			first.key.BackgroundColor3 = COLOR.accent
-			first.name.Text = "SPACE to fry"
+			first.name.Text = "click to prep"
 		elseif order.cookState == "burnt" then
 			first.key.BackgroundColor3 = COLOR.bad
 			first.name.Text = "BURNT"

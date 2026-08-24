@@ -137,24 +137,15 @@ function Kitchen:activeOrder()
 	return order
 end
 
--- If nothing is in hand (or what was just left), pick up the oldest ticket
--- that actually needs work. Orders already in the fryer are skipped: they need
--- nothing until they are ready, and auto-selecting one would reopen the prep
--- panel over a dish you cannot touch.
-function Kitchen:ensureSelection()
+-- Only clears a selection that is no longer valid. Deliberately never picks
+-- one: an order is something you choose to pick up, so nothing lands in your
+-- hands on its own and the prep panel never opens by itself.
+function Kitchen:validateSelection()
 	if self.activeOrderId and self:findOrder(self.activeOrderId) then
 		return
 	end
-
-	self.build = {}
 	self.activeOrderId = nil
-
-	for _, order in self.orders do
-		if order.cookState ~= "cooking" then
-			self.activeOrderId = order.id
-			return
-		end
-	end
+	self.build = {}
 end
 
 function Kitchen:spawnOrder()
@@ -162,7 +153,7 @@ function Kitchen:spawnOrder()
 	self.nextOrderId += 1
 	table.insert(self.orders, order)
 	self:emit({ type = "orderArrived", orderId = order.id, dishId = order.dishId })
-	self:ensureSelection()
+	self:validateSelection()
 end
 
 function Kitchen:removeOrder(orderId: number)
@@ -174,7 +165,7 @@ function Kitchen:removeOrder(orderId: number)
 		self.activeOrderId = nil
 		self.build = {}
 	end
-	self:ensureSelection()
+	self:validateSelection()
 end
 
 -- ------------------------------------------------------------ selection ----
@@ -264,7 +255,7 @@ function Kitchen:addIngredient(key: string)
 			-- Drop it from the hand so the prep panel closes and you are moved
 			-- on to whatever needs doing while this cooks.
 			self.activeOrderId = nil
-			self:ensureSelection()
+			self:validateSelection()
 		end
 		return
 	end
