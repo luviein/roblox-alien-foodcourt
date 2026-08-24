@@ -56,10 +56,12 @@ ShopDefs.Upgrades = {
 	shift = {
 		id = "shift",
 		name = "Longer Licence",
-		blurb = "Fifteen more seconds of service per shift.",
+		blurb = "Eight more seconds of service per shift.",
 		levels = { 1500, 3800, 8000 },
 		baseValue = 0,
-		perLevel = 15,
+		-- Scaled down with the shift: +15s on a ninety second day was a 17%
+		-- swing from one purchase.
+		perLevel = 8,
 	},
 }
 

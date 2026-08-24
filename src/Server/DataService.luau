@@ -36,6 +36,17 @@ local DEFAULT = {
 		burger = true,
 	},
 
+	-- One shift is one day. Drives the repeat penalty and, later, dailies.
+	day = 1,
+
+	-- Dish ids that were on yesterday's menu. Serving one again today costs
+	-- hype; resting it a single day clears it, because this is simply
+	-- overwritten by whatever menu is run next.
+	lastMenu = {},
+
+	-- How many dishes can go on the board at once.
+	menuSlots = 3,
+
 	-- Upgrade id -> levels owned.
 	upgrades = {
 		slots = 0,

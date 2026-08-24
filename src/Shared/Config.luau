@@ -7,10 +7,11 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "chores-25"
+Config.BUILD = "hype-draft-26"
 
 -- ---------------------------------------------------------------- shift ----
-Config.SHIFT_DURATION = 180        -- seconds of service per round
+-- One shift is one day: morning, afternoon and night, thirty seconds each.
+Config.SHIFT_DURATION = 90
 Config.ORDER_PATIENCE = 22         -- seconds before a customer walks out
 Config.MAX_ORDER_SLOTS = 4         -- hard cap on tickets on screen
 
@@ -35,7 +36,9 @@ Config.SPAWN_INTERVAL = {
 -- is the grade meter, so serving while it is green is a Perfect.
 -- Chores interrupt on their own schedule during service. The gap is randomised
 -- inside this range so they never become something you can plan around.
-Config.CHORE_GAP = { 18, 34 }
+-- Halved along with the shift length, so a ninety second day still gets
+-- roughly one interruption per phase rather than one per shift.
+Config.CHORE_GAP = { 9, 17 }
 
 -- What failing one costs. Halving is deliberate: a full reset for missing a
 -- five second window would make chores the whole game, and a flat -1 would

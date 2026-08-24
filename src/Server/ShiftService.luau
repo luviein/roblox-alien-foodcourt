@@ -13,6 +13,8 @@ local Remotes = require(Shared.Remotes)
 local DataService = require(script.Parent.DataService)
 local Kitchen = require(script.Parent.Kitchen)
 local ShopDefs = require(Shared.ShopDefs)
+local HypeDefs = require(Shared.HypeDefs)
+local DishDefs = require(Shared.DishDefs)
 
 -- The only keys the station will ever accept. Anything else is dropped
 -- before it reaches gameplay code.
@@ -63,6 +65,10 @@ local function pushSnapshot(player: Player)
 			unlocked = profile.unlocked,
 			upgrades = profile.upgrades,
 			lastEarned = kitchen.lastEarned,
+			day = profile.day,
+			lastMenu = profile.lastMenu,
+			menuSlots = profile.menuSlots,
+			conditions = conditionsFor(player),
 			temporary = DataService.isTemporary(player),
 		}
 	end
@@ -90,24 +96,95 @@ end
 
 -- Turns a saved profile into the numbers a shift runs on. The only place that
 -- knows how upgrades translate into gameplay.
-local function loadoutFor(player: Player)
-	local profile = DataService.get(player)
+-- Today's conditions, rolled once and held until the shift is played. Rolling
+-- them fresh on every draft screen redraw would let a player reroll the
+-- weather by closing and reopening it.
+local dayConditions: { [Player]: any } = {}
 
+local function conditionsFor(player: Player)
+	local existing = dayConditions[player]
+	if existing then
+		return existing
+	end
+
+	local profile = DataService.get(player)
+	local rng = Random.new()
+	local weather = HypeDefs.rollWeather(rng)
+
+	local conditions = {
+		day = (profile and profile.day) or 1,
+		weather = weather.id,
+		weatherName = weather.name,
+		weatherBlurb = weather.blurb,
+	}
+	dayConditions[player] = conditions
+	return conditions
+end
+
+-- Which dishes the player may draft from.
+local function unlockedMenu(profile): { string }
 	local menu = {}
-	if profile then
-		-- Order matters for the bag; walk the canonical list rather than the
-		-- profile table, whose iteration order is arbitrary.
-		if profile.unlocked.burger then
-			table.insert(menu, "burger")
-		end
-		for _, dishId in ShopDefs.DishOrder do
-			if profile.unlocked[dishId] then
-				table.insert(menu, dishId)
-			end
+	if not profile then
+		return { "burger" }
+	end
+	if profile.unlocked.burger then
+		table.insert(menu, "burger")
+	end
+	for _, dishId in ShopDefs.DishOrder do
+		if profile.unlocked[dishId] then
+			table.insert(menu, dishId)
 		end
 	end
 	if #menu == 0 then
 		menu = { "burger" }
+	end
+	return menu
+end
+
+-- `chosen` is the drafted menu. Anything not unlocked, or over the slot limit,
+-- is dropped here rather than trusted.
+local function loadoutFor(player: Player, chosen: { string }?)
+	local profile = DataService.get(player)
+	local allowed = {}
+	for _, dishId in unlockedMenu(profile) do
+		allowed[dishId] = true
+	end
+
+	local slots = (profile and profile.menuSlots) or 3
+	local menu = {}
+	local seen = {}
+
+	for _, dishId in (chosen or {}) do
+		if allowed[dishId] and not seen[dishId] and #menu < slots then
+			seen[dishId] = true
+			table.insert(menu, dishId)
+		end
+	end
+
+	-- Nothing draftable came through: fall back to whatever they own so a
+	-- malformed request cannot produce a shift with no dishes at all.
+	if #menu == 0 then
+		for _, dishId in unlockedMenu(profile) do
+			if #menu < slots then
+				table.insert(menu, dishId)
+			end
+		end
+	end
+
+	local defs = {}
+	for _, dishId in menu do
+		table.insert(defs, DishDefs.get(dishId))
+	end
+
+	local conditions = conditionsFor(player)
+	local yesterday = {}
+	for _, dishId in ((profile and profile.lastMenu) or {}) do
+		yesterday[dishId] = true
+	end
+
+	local hypeByPhase = {}
+	for _, phase in HypeDefs.Phases do
+		hypeByPhase[phase] = HypeDefs.evaluate(defs, phase, conditions.weather, yesterday)
 	end
 
 	local upgrades = (profile and profile.upgrades) or {}
@@ -123,13 +200,15 @@ local function loadoutFor(player: Player)
 		-- between players; what it is worth does not.
 		cashMultiplier = 1 + ShopDefs.valueOf("tips", upgrades.tips or 0),
 
-		-- How many menu dishes carry each chore-provoking tag. Empty until the
-		-- menu draft exists; ChoreDefs falls back to flat odds.
-		tagCounts = {},
+		hypeByPhase = hypeByPhase,
+		weather = conditions.weather,
+
+		-- A menu full of greasy wrappers really does bury you in trash.
+		tagCounts = HypeDefs.tagCounts(defs),
 	}
 end
 
-local function onStartShift(player: Player)
+local function onStartShift(player: Player, chosenMenu: any)
 	local kitchen = kitchens[player]
 	if not kitchen then
 		return
@@ -138,7 +217,14 @@ local function onStartShift(player: Player)
 	if kitchen.state == "Results" then
 		kitchen:closeResults()
 	elseif kitchen.state == "Idle" then
-		kitchen:startShift(loadoutFor(player))
+		local loadout = loadoutFor(player, if typeof(chosenMenu) == "table" then chosenMenu else nil)
+		kitchen:startShift(loadout)
+
+		-- Today's menu becomes tomorrow's repeat penalty. Recorded at the
+		-- START of the shift so quitting halfway does not dodge it.
+		DataService.update(player, function(data)
+			data.lastMenu = table.clone(loadout.menu)
+		end)
 	end
 
 	pushSnapshot(player)
@@ -283,8 +369,11 @@ local function startTickLoop()
 						data.stats.shifts += 1
 						data.stats.served += kitchen.stats.served
 						data.stats.bestScore = math.max(data.stats.bestScore, kitchen.score)
-						data.stats.bestCombo = math.max(data.stats.bestCombo, kitchen.bestCombo)
+						data.day += 1
 					end)
+
+					-- A finished day gets fresh weather tomorrow.
+					dayConditions[player] = nil
 					DataService.save(player)
 				end
 				-- Idle kitchens have nothing moving; skip the traffic unless

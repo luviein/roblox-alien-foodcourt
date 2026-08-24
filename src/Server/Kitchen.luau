@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local ChoreDefs = require(Shared.ChoreDefs)
+local HypeDefs = require(Shared.HypeDefs)
 local DishDefs = require(Shared.DishDefs)
 
 local OrderService = require(script.Parent.OrderService)
@@ -68,6 +69,8 @@ function Kitchen.new(participants: { Player })
 	self.fumbleUntil = 0
 	self.chore = nil
 	self.nextChoreAt = 0
+	self.phase = ""
+	self.hype = 1
 
 	self.events = {}  -- drained by ShiftService each tick
 
@@ -124,6 +127,8 @@ function Kitchen:startShift(loadout)
 	-- Nothing interrupts in the opening moments; let them get going first.
 	self.chore = nil
 	self.nextChoreAt = t + choreGap(self.bag.rng) * 0.6
+	self.phase = ""
+	self.hype = (loadout.hypeByPhase and loadout.hypeByPhase.morning) or 1
 	self.fumbleUntil = 0
 
 	self:emit({ type = "shiftStarted" })
@@ -609,6 +614,19 @@ function Kitchen:tick()
 	local maxActive = curveValue(Config.MAX_ACTIVE_ORDERS, progress)
 	local interval = curveValue(Config.SPAWN_INTERVAL, progress)
 
+	-- Hype IS the spawn rate. A well-drafted menu fills the queue; a bad one
+	-- leaves you idle, which is why the draft matters more than any single
+	-- dish on it. Recomputed per phase, so a breakfast dish stops earning its
+	-- place the moment the morning ends.
+	local phase = HypeDefs.phaseAt(t - self.shiftStartedAt, self.loadout.shiftDuration)
+	if phase ~= self.phase then
+		self.phase = phase
+		self.hype = (self.loadout.hypeByPhase and self.loadout.hypeByPhase[phase]) or 1
+		self:emit({ type = "phaseChanged", phase = phase, hype = self.hype })
+	end
+
+	interval /= math.max(self.hype, 0.01)
+
 	if t >= self.nextSpawnAt and #self.orders < math.min(maxActive, self.loadout.orderSlots) then
 		self:spawnOrder()
 		self.nextSpawnAt = t + interval
@@ -661,6 +679,8 @@ function Kitchen:snapshot()
 		build = self.build,
 		fumbleUntil = self.fumbleUntil,
 		chore = self.chore,
+		phase = self.phase,
+		hype = self.hype,
 		orders = orders,
 		stats = self.stats,
 	}

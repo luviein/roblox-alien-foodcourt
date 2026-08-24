@@ -45,6 +45,10 @@ local BOOT_TIMEOUT = 30
 -- sting fires on the way up and not on every serve afterwards.
 local comboWasMaxed = false
 
+-- The menu drafted for the next shift. Empty means "whatever I own", which is
+-- what a player who has not opened the draft screen gets.
+local draftMenu: { string } = {}
+
 -- ----------------------------------------------------------------- scene ---
 
 Scene.applyLighting()
@@ -94,7 +98,7 @@ local function onStart()
 	if not ready then
 		return
 	end
-	Remotes.StartShift:FireServer()
+	Remotes.StartShift:FireServer(draftMenu)
 end
 
 -- Declared before UI.build so the shop callback closes over the local rather
