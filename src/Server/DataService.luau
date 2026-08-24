@@ -230,6 +230,9 @@ end
 
 -- ------------------------------------------------------------------ init --
 
+-- Set by whoever needs to know a profile is now available: (player) -> ().
+DataService.onLoaded = nil :: ((Player) -> ())?
+
 function DataService.start()
 	local ok, result = pcall(function()
 		return DataStoreService:GetDataStore(STORE_NAME)
@@ -245,6 +248,16 @@ function DataService.start()
 
 	local function onPlayerAdded(player: Player)
 		profiles[player] = loadProfile(player)
+
+		-- loadProfile YIELDS -- it retries, and a DataStore round trip is not
+		-- instant even when it works. Anyone who pushed state to this player
+		-- before now sent it without a profile attached, so tell them it has
+		-- landed. Without this the client shows a blank shop and a blank draft
+		-- until the first shift starts, because an idle server has no other
+		-- reason to push.
+		if DataService.onLoaded and player.Parent then
+			task.spawn(DataService.onLoaded, player)
+		end
 	end
 
 	for _, player in Players:GetPlayers() do

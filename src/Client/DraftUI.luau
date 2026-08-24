@@ -312,7 +312,7 @@ function DraftUI.build(playerGui: Instance, onConfirm: ({ string }) -> ())
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 20),
 		Font = Enum.Font.GothamBold,
-		Text = "EXPECTED BUZZ",
+		Text = "EXPECTED HYPE",
 		TextColor3 = COLOR.dim,
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -339,7 +339,7 @@ function DraftUI.build(playerGui: Instance, onConfirm: ({ string }) -> ())
 		Position = UDim2.fromOffset(0, 186),
 		Size = UDim2.new(1, 0, 0, 18),
 		Font = Enum.Font.GothamBold,
-		Text = "WHY",
+		Text = "WHY",   -- the reasons behind the numbers above
 		TextColor3 = COLOR.dim,
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -450,6 +450,9 @@ end
 
 function DraftUI.render(refs, profile)
 	if not profile then
+		-- Better to say so than to present an empty panel as though it were an
+		-- answer. Should be momentary: the server pushes again on profile load.
+		refs.reasons.Text = "Still loading your profile..."
 		return
 	end
 
@@ -575,11 +578,15 @@ function DraftUI.render(refs, profile)
 		table.insert(allReasons, ("...and %d more"):format(trimmed))
 	end
 
+	local count = DraftUI.count(refs)
+
+	-- An empty WHY column is ambiguous: it could mean "this menu has no
+	-- effects" or "nothing rendered". Say which.
 	refs.reasons.Text = if #allReasons > 0
 		then table.concat(allReasons, "\n")
+		elseif count == 0 then "Pick some dishes to see how the day reacts."
 		else "Nothing on this menu stands out today."
 
-	local count = DraftUI.count(refs)
 	refs.slotLabel.Text = string.format("%d / %d chosen", count, slots)
 	refs.confirm.BackgroundColor3 = if count > 0 then COLOR.good else COLOR.panelHi
 end

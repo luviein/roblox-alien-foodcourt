@@ -397,6 +397,10 @@ function ShiftService.start()
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	Players.PlayerRemoving:Connect(onPlayerRemoving)
 
+	-- Profiles load asynchronously. An idle kitchen never pushes on its own,
+	-- so without this the client would sit on a profile-less snapshot.
+	DataService.onLoaded = pushSnapshot
+
 	Remotes.StartShift.OnServerEvent:Connect(onStartShift)
 	Remotes.StationAction.OnServerEvent:Connect(onStationAction)
 
