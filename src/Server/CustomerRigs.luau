@@ -90,6 +90,13 @@ local function prepareRig(model: Model)
 		humanoid.NameDisplayDistance = 0
 		humanoid.HealthDisplayDistance = 0
 		humanoid.BreakJointsOnDeath = false
+
+		-- Critical for procedural posing: while this is on, the Humanoid
+		-- recomputes every Motor6D C0 from attachment positions each frame,
+		-- silently overwriting anything NpcAnimator writes. Body scaling from
+		-- the HumanoidDescription has already been baked in by this point, so
+		-- turning it off costs nothing.
+		humanoid.AutomaticScalingEnabled = false
 	end
 
 	for _, descendant in model:GetDescendants() do

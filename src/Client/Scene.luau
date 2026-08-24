@@ -155,12 +155,17 @@ function Scene.build()
 	local spawnPosition = ORIGIN + Vector3.new(SPAWN_X, 0, QUEUE_Z)
 	local exitPosition = ORIGIN + Vector3.new(-SPAWN_X, 0, QUEUE_Z)
 
+	-- Where a customer waits when every slot is still occupied by someone
+	-- reacting or walking out. On screen, so their ticket stays selectable.
+	local waitPosition = ORIGIN + Vector3.new(QUEUE_X[#QUEUE_X] + 3.4, 0, QUEUE_Z)
+
 	return {
 		folder = folder,
 		plateTop = PLATE_CENTER + Vector3.new(0, 0.08, 0),
 		slots = slots,
 		spawnCFrame = CFrame.lookAt(spawnPosition, spawnPosition + Vector3.new(0, 0, 1)),
 		exitCFrame = CFrame.lookAt(exitPosition, exitPosition + Vector3.new(0, 0, 1)),
+		waitCFrame = CFrame.lookAt(waitPosition, waitPosition + Vector3.new(0, 0, 1)),
 	}
 end
 

@@ -18,6 +18,7 @@ local DishDefs = require(Shared.DishDefs)
 
 local Alien = require(script.Parent.Alien)
 local NpcAnimator = require(script.Parent.NpcAnimator)
+local Face = require(script.Parent.Face)
 
 local Customers = {}
 
@@ -62,6 +63,7 @@ local COLOR = {
 local scene: any = nil
 local active: { [number]: any } = {}
 local nextSeed = 1
+local warnedNoJoints = false
 
 -- ------------------------------------------------------------- billboard ---
 
@@ -207,31 +209,6 @@ local function buildBillboard(adornee: BasePart, heightOffset: number)
 	}
 end
 
--- ------------------------------------------------------------------ face ---
-
--- The reaction faces the server resolved and published as attributes on the
--- rig folder. Read lazily: the server finishes resolving these well after the
--- first client connects.
-local function reactionFaceId(mood: string): number?
-	local folder = ReplicatedStorage:FindFirstChild("CustomerRigs")
-	if not folder then
-		return nil
-	end
-	return folder:GetAttribute(if mood == "angry" then "AngryFace" else "HappyFace")
-end
-
--- Swaps the decal on the customer's head. Passing nil restores whatever face
--- they were built with.
-local function setFace(entry, assetId: number?)
-	local decal = entry.body.faceDecal
-	if not decal then
-		return
-	end
-	decal.Texture = if assetId
-		then ("rbxassetid://%d"):format(assetId)
-		else entry.body.neutralFace
-end
-
 -- A big emoji that pops above the head on serve or walk-out.
 local function buildReactionBubble(adornee: BasePart, heightOffset: number)
 	local gui = make("BillboardGui", {
@@ -293,9 +270,25 @@ local function buildRigCustomer()
 
 	model.PrimaryPart = root
 
+	-- Belt and braces: the server already disables this, but a rig that
+	-- somehow arrives with it on will silently ignore every pose we write.
+	humanoid.AutomaticScalingEnabled = false
+
 	-- Joint driver. Returns nil if this is not an R15 rig, in which case the
 	-- customer simply stands still rather than erroring.
 	local rig = NpcAnimator.bind(model)
+	if not rig and not warnedNoJoints then
+		warnedNoJoints = true
+		local found = {}
+		for _, descendant in model:GetDescendants() do
+			if descendant:IsA("Motor6D") then
+				table.insert(found, descendant.Name)
+			end
+		end
+		warn(("[AlienFoodCourt] no poseable joints on customer rig -- walk and "
+			.. "reaction poses disabled. Motor6Ds found: %s")
+			:format(if #found > 0 then table.concat(found, ", ") else "none"))
+	end
 
 	-- Impatience is shown by tinting the whole customer rather than recolouring
 	-- body parts, which would fight with their clothing.
@@ -309,8 +302,17 @@ local function buildRigCustomer()
 	-- position without this offset would bury them to the waist.
 	local yOffset = humanoid.HipHeight + root.Size.Y / 2
 
-	-- The head's face decal, so reactions can change their actual expression.
+	-- Expression. The drawn face replaces the head's decal outright: leaving
+	-- the catalog face underneath would show two mouths.
 	local faceDecal = if head then head:FindFirstChildOfClass("Decal") else nil
+	local drawnFace = nil
+
+	if head then
+		if faceDecal then
+			faceDecal.Transparency = 1
+		end
+		drawnFace = Face.attach(head)
+	end
 
 	return {
 		kind = "rig",
@@ -320,8 +322,7 @@ local function buildRigCustomer()
 		yOffset = yOffset,
 		highlight = highlight,
 		rig = rig,
-		faceDecal = faceDecal,
-		neutralFace = if faceDecal then faceDecal.Texture else "",
+		face = drawnFace,
 	}
 end
 
@@ -450,7 +451,9 @@ function Customers.markExit(orderId: number, outcome: string)
 
 	-- The expression goes on the customer's own face. The bubble is a second,
 	-- readable-at-distance channel -- the face alone is small on screen.
-	setFace(entry, reactionFaceId(reaction.mood))
+	if entry.body.face then
+		Face.set(entry.body.face, if reaction.mood == "angry" then -1 else 1)
+	end
 
 	entry.bill.gui.Enabled = false
 	entry.reaction.label.Text = reaction.emoji
@@ -507,7 +510,23 @@ function Customers.sync(snapshot)
 
 	local seen = {}
 
-	for slotIndex, order in snapshot.orders do
+	-- A customer who is reacting or walking out still physically occupies
+	-- their spot. Without this the queue shuffles forward the instant the
+	-- server drops the order, and the next customer walks into the one still
+	-- standing there.
+	local held = {}
+	for _, entry in active do
+		if entry.slotIndex and (entry.phase == "reacting" or entry.phase == "leaving") then
+			held[entry.slotIndex] = true
+		end
+	end
+
+	local nextFree = 1
+
+	-- `orderIndex` is the server's position in the queue and is what the 1-4
+	-- keys select, so it drives the ticket badge. The visual slot is worked
+	-- out separately, skipping anything still being vacated.
+	for orderIndex, order in snapshot.orders do
 		seen[order.id] = true
 
 		local entry = active[order.id]
@@ -515,16 +534,24 @@ function Customers.sync(snapshot)
 			entry = spawnCustomer(order)
 		end
 
-		local slot = scene.slots[slotIndex]
-		if slot then
-			entry.targetPosition = slot.Position
-			entry.slotIndex = slotIndex
+		while nextFree <= #scene.slots and held[nextFree] do
+			nextFree += 1
+		end
+
+		if nextFree <= #scene.slots then
+			entry.slotIndex = nextFree
+			entry.targetPosition = scene.slots[nextFree].Position
+			nextFree += 1
+		else
+			-- Every slot is still being vacated; hang back at the entrance.
+			entry.slotIndex = nil
+			entry.targetPosition = scene.waitCFrame.Position
 		end
 
 		entry.createdAt = order.createdAt
 		entry.expiresAt = order.expiresAt
 
-		renderTicket(entry, order, slotIndex, snapshot)
+		renderTicket(entry, order, orderIndex, snapshot)
 	end
 
 	-- Anything the snapshot dropped without an accompanying event just leaves
@@ -603,6 +630,13 @@ function Customers.update(dt: number, _snapshot)
 
 			if body.kind == "rig" then
 				body.highlight.FillTransparency = 1 - agitation * 0.45
+				if body.face then
+					-- A mild smile when they arrive, easing into a scowl as
+					-- the timer burns down. The expression is continuous, so
+					-- you can read how close someone is to walking out from
+					-- their face alone.
+					Face.tween(body.face, 0.35 - agitation * 1.1, dt)
+				end
 			else
 				Alien.setMood(body.alien, calm)
 			end
