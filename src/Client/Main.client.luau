@@ -275,6 +275,7 @@ local function handleEvent(event)
 		Customers.clear()
 		FoodStack.clear()
 		comboWasMaxed = false
+		Audio.stopAllLoops()
 		Audio.play("roundComplete")
 	end
 end
@@ -287,6 +288,22 @@ Remotes.ShiftUpdate.OnClientEvent:Connect(function(newSnapshot)
 	end
 
 	snapshot = newSnapshot
+
+	-- Cooking loops are driven off the snapshot rather than started and stopped
+	-- by events. Every frame the answer is simply "is anything on the heat
+	-- right now", which cannot drift out of sync the way paired start/stop
+	-- calls do when an order burns or walks out.
+	local anyFrying, anySearing = false, false
+	for _, order in snapshot.orders do
+		if order.cookState == "cooking" then
+			anyFrying = true
+		end
+		if order.searState == "searing" then
+			anySearing = true
+		end
+	end
+	Audio.setLoop("frying", anyFrying and snapshot.state == "Service")
+	Audio.setLoop("sizzle", anySearing and snapshot.state == "Service")
 
 	UI.render(refs, snapshot)
 	Customers.sync(snapshot)

@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "P1b-sear-19"
+Config.BUILD = "sizzle-20"
 
 -- ---------------------------------------------------------------- shift ----
 Config.SHIFT_DURATION = 180        -- seconds of service per round

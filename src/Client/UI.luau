@@ -584,6 +584,14 @@ function UI.render(refs, snapshot)
 	if showSear then
 		refs.searMeter.band.Position = UDim2.fromScale(sear.perfectFrom, 0)
 		refs.searMeter.band.Size = UDim2.fromScale(sear.perfectTo - sear.perfectFrom, 1)
+
+		-- Empty the bar until this order is actually on the heat. renderTimers
+		-- only writes the fill while searing, so without this the meter opened
+		-- still holding the last steak's value.
+		if activeOrder.searState ~= "searing" then
+			refs.searMeter.fill.Size = UDim2.fromScale(0, 1)
+			refs.searMeter.fill.BackgroundColor3 = COLOR.warn
+		end
 		refs.searMeter.label.Text = if activeOrder.searState == "searing"
 			then "let go in the green"
 			else ("hold %s to %s"):format(sear.key, string.lower(sear.label:gsub(" %(hold%)", "")))

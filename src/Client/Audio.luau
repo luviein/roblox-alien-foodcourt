@@ -125,6 +125,36 @@ function Audio.play(name: string)
 	Debris:AddItem(sound, 10)
 end
 
+-- ------------------------------------------------------------------ loops --
+
+local loops: { [string]: Sound } = {}
+
+-- Declarative on purpose: the caller says whether the thing should be sounding
+-- right now, every snapshot, and this makes it so. Counting starts and stops
+-- instead would drift out of sync the first time an order burned, expired or
+-- was collected down a path that forgot to decrement.
+function Audio.setLoop(name: string, shouldPlay: boolean)
+	local sound = loops[name]
+	if not sound then
+		return
+	end
+
+	if shouldPlay then
+		sound.Volume = (SoundDefs.Loops[name].volume) * Settings.values.sfxVolume
+		if not sound.IsPlaying then
+			sound:Play()
+		end
+	elseif sound.IsPlaying then
+		sound:Stop()
+	end
+end
+
+function Audio.stopAllLoops()
+	for name in loops do
+		Audio.setLoop(name, false)
+	end
+end
+
 -- ------------------------------------------------------------------- init --
 
 function Audio.init()
@@ -157,8 +187,24 @@ function Audio.init()
 		task.spawn(playNextTrack)
 	end)
 
+	for name, def in SoundDefs.Loops do
+		if def.id ~= 0 then
+			local sound = Instance.new("Sound")
+			sound.Name = "AFC_Loop_" .. name
+			sound.SoundId = assetUrl(def.id)
+			sound.Looped = true
+			sound.Volume = def.volume * Settings.values.sfxVolume
+			sound.SoundGroup = sfxGroup
+			sound.Parent = SoundService
+			loops[name] = sound
+		end
+	end
+
 	Settings.changed.Event:Connect(function(key: string, value: any)
 		if key == "sfxVolume" then
+			for name, sound in loops do
+				sound.Volume = SoundDefs.Loops[name].volume * value
+			end
 			-- Live SFX are one-shots and already gone; the next one picks up
 			-- the new value when it is created.
 			-- Audible feedback while adjusting, throttled: dragging the slider

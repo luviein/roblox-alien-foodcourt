@@ -44,6 +44,15 @@ SoundDefs.Sfx = {
 }
 
 -- Played in order, then looped back to the start.
+-- Held while something is cooking, rather than fired once. A sizzle that plays
+-- for a moment and stops tells you a thing happened; one that runs for as long
+-- as the pan is hot tells you something is STILL happening, which is the part
+-- that matters when it is out of sight behind the prep panel.
+SoundDefs.Loops = {
+	sizzle = { id = 7056816387, volume = 0.45 },   -- grill, while searing
+	frying = { id = 6377822658, volume = 0.35 },   -- fryer, while a basket is down
+}
+
 -- Trims the tracks themselves before the slider is applied. Music assets are
 -- usually mastered far louder than short effects, so without this the slider
 -- spends its whole range fighting the source material.
