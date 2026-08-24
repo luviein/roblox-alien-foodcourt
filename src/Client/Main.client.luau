@@ -5,6 +5,7 @@
 -- never grades a dish, never runs a timer that matters. It sends intents and
 -- draws whatever the server last told it.
 
+local ContentProvider = game:GetService("ContentProvider")
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,12 +19,21 @@ local Remotes = require(Shared.Remotes)
 local Scene = require(script.Parent.Scene)
 local Customers = require(script.Parent.Customers)
 local FoodStack = require(script.Parent.FoodStack)
+local Loading = require(script.Parent.Loading)
 local UI = require(script.Parent.UI)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local snapshot: any = nil
+
+-- Nothing accepts input until the avatar pool is built and preloaded.
+local ready = false
+
+-- Ceiling on how long we will wait for the server. If the pool never
+-- finishes, the game opens anyway with the procedural fallback rather than
+-- stranding the player on a loading screen.
+local BOOT_TIMEOUT = 30
 
 -- ----------------------------------------------------------------- scene ---
 
@@ -61,6 +71,9 @@ local function onSelect(slot: number)
 end
 
 local function onStart()
+	if not ready then
+		return
+	end
 	Remotes.StartShift:FireServer()
 end
 
@@ -100,6 +113,9 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 	end
 	if UserInputService:GetFocusedTextBox() then
 		return Enum.ContextActionResult.Pass
+	end
+	if not ready then
+		return Enum.ContextActionResult.Sink
 	end
 
 	local keyCode = input.KeyCode
@@ -211,4 +227,54 @@ end)
 -- Ask for current state now that the handlers above are connected.
 sendAction({ action = "sync" })
 
-print("[AlienFoodCourt] client ready")
+-- ------------------------------------------------------------------ boot ---
+
+-- Holds the game shut until the customer rigs exist AND their meshes and
+-- textures are resident. Skipping either half is what made the first
+-- customers of a session show up as fallback blobs.
+local function boot()
+	local loading = Loading.show(playerGui)
+
+	Loading.setStatus(loading, "contacting the station", 0.05)
+
+	local folder = ReplicatedStorage:WaitForChild("CustomerRigs", 15)
+
+	if folder then
+		local deadline = os.clock() + BOOT_TIMEOUT
+
+		while not folder:GetAttribute("Ready") and os.clock() < deadline do
+			local built = folder:GetAttribute("Built") or 0
+			local total = math.max(folder:GetAttribute("Total") or 1, 1)
+			Loading.setStatus(
+				loading,
+				("processing arrivals   %d / %d"):format(built, total),
+				0.1 + 0.55 * (built / total)
+			)
+			task.wait(0.1)
+		end
+
+		-- PreloadAsync is the part that actually matters: without it the rigs
+		-- exist but stream in grey and untextured on first sight.
+		local rigs = folder:GetChildren()
+		if #rigs > 0 then
+			Loading.setStatus(loading, "loading appearances", 0.7)
+			pcall(function()
+				ContentProvider:PreloadAsync(rigs)
+			end)
+		else
+			warn("[AlienFoodCourt] no rigs available at boot -- using procedural fallback")
+		end
+	else
+		warn("[AlienFoodCourt] CustomerRigs never appeared -- using procedural fallback")
+	end
+
+	Loading.setStatus(loading, "opening the shutters", 1)
+	task.wait(0.35)
+
+	ready = true
+	Loading.finish(loading)
+
+	print("[AlienFoodCourt] client ready")
+end
+
+task.spawn(boot)

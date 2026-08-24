@@ -118,6 +118,13 @@ function CustomerRigs.build()
 
 	local folder = Instance.new("Folder")
 	folder.Name = FOLDER_NAME
+
+	-- Progress attributes, read by the client's loading screen. Set before the
+	-- folder is parented so a client can never observe it without them.
+	folder:SetAttribute("Total", AvatarPool.POOL_SIZE)
+	folder:SetAttribute("Built", 0)
+	folder:SetAttribute("Ready", false)
+
 	folder.Parent = ReplicatedStorage
 
 	-- Yields on web calls, so never block server startup on it.
@@ -154,7 +161,13 @@ function CustomerRigs.build()
 			else
 				warn(("[AlienFoodCourt] rig %d failed to build: %s"):format(index, tostring(result)))
 			end
+
+			folder:SetAttribute("Built", built)
 		end
+
+		-- Always flip Ready, even with zero rigs -- the client must not sit on
+		-- a loading screen forever because the pool failed.
+		folder:SetAttribute("Ready", true)
 
 		if built == 0 then
 			warn("[AlienFoodCourt] no customer rigs built -- client will fall back to procedural aliens")
