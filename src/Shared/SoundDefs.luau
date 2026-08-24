@@ -38,9 +38,10 @@ SoundDefs.Sfx = {
 		pitchJitter = 0.03,
 	},
 
-	-- The basket going into the oil. `hold` at full volume then `fade` down to
-	-- nothing, so it reads as the moment the food hits the fat rather than
-	-- running for the whole cook.
+	-- Cooking sounds are bounded rather than held. `hold` plays at full volume
+	-- then `fade` takes it to nothing, so each one marks the moment the food
+	-- hits the heat instead of narrating the whole wait -- which the countdown
+	-- on the ticket already does, and which grates once several are running.
 	frying = {
 		id = 6377822658,
 		volume = 0.5,
@@ -49,25 +50,17 @@ SoundDefs.Sfx = {
 		fade = 0.9,
 	},
 
+	sizzle = {
+		id = 7056816387,
+		volume = 0.45,
+		pitchJitter = 0.03,
+		hold = 1.0,
+		fade = 0.8,   -- 1.8s in total
+	},
+
 	-- Not sourced yet. Left at 0 so they no-op rather than erroring.
 	ticketArrive = { id = 0, volume = 0.6, pitchJitter = 0.04 },
 	fumble       = { id = 0, volume = 0.4, pitchJitter = 0.05 },
-}
-
--- Played in order, then looped back to the start.
--- Held while something is cooking, rather than fired once. A sizzle that plays
--- for a moment and stops tells you a thing happened; one that runs for as long
--- as the pan is hot tells you something is STILL happening, which is the part
--- that matters when it is out of sight behind the prep panel.
-SoundDefs.Loops = {
-	-- Only the grill. Searing lasts two or three seconds and you are holding a
-	-- key throughout, so a continuous sizzle is the feedback -- it stops when
-	-- you let go, which is the whole point.
-	--
-	-- The fryer is deliberately NOT here. A basket is down for far longer and
-	-- several can be down at once, so a held loop turns into a permanent hum
-	-- that stops carrying any information after the first second.
-	sizzle = { id = 7056816387, volume = 0.45 },
 }
 
 -- Trims the tracks themselves before the slider is applied. Music assets are
@@ -75,6 +68,7 @@ SoundDefs.Loops = {
 -- spends its whole range fighting the source material.
 SoundDefs.MusicGain = 0.45
 
+-- Played in order, then looped back to the start.
 SoundDefs.Music = {
 	85881788376421,
 	90665611745011,

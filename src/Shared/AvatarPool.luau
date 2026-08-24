@@ -45,7 +45,7 @@ AvatarPool.AngryFaces = {}
 
 -- Accessory asset IDs.
 AvatarPool.Hair = {13823150138,126263758311070,82005629783010,124004421267994,116805164568378}
-AvatarPool.Hats = {}
+AvatarPool.Hats = {79444031174743,13590822591}
 AvatarPool.FaceAccessories = {}   -- glasses, masks, antennae if you find any
 
 -- ---------------------------------------------------------------- bodies ---

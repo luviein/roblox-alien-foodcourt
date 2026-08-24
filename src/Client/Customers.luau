@@ -55,6 +55,10 @@ local COLOR = {
 	good    = Color3.fromRGB(108, 220, 140),
 	warn    = Color3.fromRGB(246, 184, 72),
 	bad     = Color3.fromRGB(242, 92, 92),
+
+	-- Ticket background when something is finished and waiting to be collected.
+	-- A tint rather than a fill: the text still has to be readable over it.
+	readyPanel = Color3.fromRGB(26, 52, 38),
 }
 
 local scene: any = nil
@@ -652,12 +656,28 @@ local function renderTicket(entry, order, slotIndex: number, snapshot)
 	local isActive = order.id == snapshot.activeOrderId
 	local built = if isActive then #snapshot.build else 0
 
+	-- Anything finished and waiting to be handed over: out of the fryer, or off
+	-- the grill. This is the cue INSTEAD of a sound -- a ding per ready dish is
+	-- unbearable once three are up at once, whereas three green tickets read at
+	-- a glance and do not stack on top of each other.
+	local readyToCollect = order.cookState == "ready" or order.searState == "done"
+
 	local bill = entry.bill
 	bill.title.Text = dish and dish.displayName or order.dishId
 	bill.slotBadge.Text = tostring(slotIndex)
 	bill.slotBadge.TextColor3 = if isActive then COLOR.accent else COLOR.dim
-	bill.stroke.Color = if isActive then COLOR.accent else COLOR.stroke
-	bill.stroke.Thickness = if isActive then 3 else 2
+
+	if readyToCollect then
+		-- Beats the selection highlight: what needs collecting matters more
+		-- than what happens to be in your hands.
+		bill.stroke.Color = COLOR.good
+		bill.stroke.Thickness = 4
+		bill.panel.BackgroundColor3 = COLOR.readyPanel
+	else
+		bill.stroke.Color = if isActive then COLOR.accent else COLOR.stroke
+		bill.stroke.Thickness = if isActive then 3 else 2
+		bill.panel.BackgroundColor3 = COLOR.panel
+	end
 
 	-- Fried orders have nothing to assemble. Their ticket carries the cook
 	-- state instead, and the countdown is filled in per frame by update() --
