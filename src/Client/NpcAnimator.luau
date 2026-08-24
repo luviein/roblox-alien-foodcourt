@@ -50,6 +50,75 @@ export type Rig = {
 	phase: number,
 }
 
+-- The R15 skeleton: joint name, the part it hangs from, and the part it moves.
+-- Both parts carry an Attachment called "<jointName>RigAttachment", and the
+-- pair of those defines the joint completely.
+local R15_JOINTS = {
+	{ "Root",          "HumanoidRootPart", "LowerTorso" },
+	{ "Waist",         "LowerTorso",       "UpperTorso" },
+	{ "Neck",          "UpperTorso",       "Head" },
+	{ "LeftShoulder",  "UpperTorso",       "LeftUpperArm" },
+	{ "LeftElbow",     "LeftUpperArm",     "LeftLowerArm" },
+	{ "LeftWrist",     "LeftLowerArm",     "LeftHand" },
+	{ "RightShoulder", "UpperTorso",       "RightUpperArm" },
+	{ "RightElbow",    "RightUpperArm",    "RightLowerArm" },
+	{ "RightWrist",    "RightLowerArm",    "RightHand" },
+	{ "LeftHip",       "LowerTorso",       "LeftUpperLeg" },
+	{ "LeftKnee",      "LeftUpperLeg",     "LeftLowerLeg" },
+	{ "LeftAnkle",     "LeftLowerLeg",     "LeftFoot" },
+	{ "RightHip",      "LowerTorso",       "RightUpperLeg" },
+	{ "RightKnee",     "RightUpperLeg",    "RightLowerLeg" },
+	{ "RightAnkle",    "RightLowerLeg",    "RightFoot" },
+}
+
+-- Assembles the Motor6Ds a rig should already have.
+--
+-- Rigs from CreateHumanoidModelFromDescription arrive as correctly-positioned
+-- but entirely unconnected body parts: 56 rig attachments and zero joints.
+-- Humanoid:BuildRigFromAttachments() reports success on them and creates
+-- nothing, so the parts hold whatever pose they were laid out in and move as
+-- one rigid lump -- a T-pose that slides.
+--
+-- Everything needed is already on the model, so we can just do it: pair the
+-- attachments up and make the joints. Skips any joint that already exists, so
+-- it is safe to call on a properly assembled rig.
+function NpcAnimator.buildJoints(model: Model): number
+	local created = 0
+
+	for _, spec in R15_JOINTS do
+		local jointName, parentName, childName = spec[1], spec[2], spec[3]
+
+		local parentPart = model:FindFirstChild(parentName)
+		local childPart = model:FindFirstChild(childName)
+
+		if parentPart and childPart
+			and parentPart:IsA("BasePart") and childPart:IsA("BasePart")
+			and not childPart:FindFirstChild(jointName)
+		then
+			local attachmentName = jointName .. "RigAttachment"
+			local parentAttachment = parentPart:FindFirstChild(attachmentName)
+			local childAttachment = childPart:FindFirstChild(attachmentName)
+
+			if parentAttachment and childAttachment
+				and parentAttachment:IsA("Attachment") and childAttachment:IsA("Attachment")
+			then
+				local motor = Instance.new("Motor6D")
+				motor.Name = jointName
+				motor.Part0 = parentPart
+				motor.Part1 = childPart
+				-- The attachment pair IS the joint: C0 where it sits on the
+				-- parent, C1 where it sits on the child.
+				motor.C0 = parentAttachment.CFrame
+				motor.C1 = childAttachment.CFrame
+				motor.Parent = childPart
+				created += 1
+			end
+		end
+	end
+
+	return created
+end
+
 -- R15 rigs built by CreateHumanoidModelFromDescription arrive in a T-pose:
 -- there is no Animate script to settle them into an idle. Every angle we write
 -- is relative to the joint's resting C0, so without correcting that first the
@@ -57,10 +126,11 @@ export type Rig = {
 --
 -- Only applies to catalog rigs. The procedural alien is authored with its arms
 -- already down, and would end up in a T-pose if this were applied to it.
-local REST_OFFSET = {
-	LeftShoulder = CFrame.Angles(0, 0, math.rad(80)),
-	RightShoulder = CFrame.Angles(0, 0, math.rad(-80)),
-}
+-- Empty on purpose. Joints built from rig attachments land in the skeleton's
+-- proper bind pose (arms down), so no correction is needed -- the T-pose was
+-- never a pose, it was parts sitting where they were laid out because nothing
+-- connected them. Kept as a hook in case a rig does need correcting.
+local REST_OFFSET = {}
 
 function NpcAnimator.bind(model: Model, tPosed: boolean?): Rig?
 	-- Index every Motor6D by its actual name first, then resolve canonical
