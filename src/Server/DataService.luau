@@ -112,6 +112,30 @@ local function keyFor(player: Player): string
 	return "p_" .. tostring(player.UserId)
 end
 
+-- Some DataStore failures are configuration, not weather. Retrying an unticked
+-- checkbox just spends nine seconds arriving at the same answer, so these fail
+-- on the first try and say what to actually do about it.
+local PERMANENT = {
+	{
+		match = "Studio access to APIs is not allowed",
+		fix = "tick File -> Game Settings -> Security -> Enable Studio Access "
+			.. "to API Services, then restart the playtest.",
+	},
+	{
+		match = "place has not been published",
+		fix = "publish the place to Roblox first; DataStores need a real place id.",
+	},
+}
+
+local function permanentFix(message: string): string?
+	for _, entry in PERMANENT do
+		if string.find(message, entry.match, 1, true) then
+			return entry.fix
+		end
+	end
+	return nil
+end
+
 -- Retries with backoff. DataStore failures are usually transient.
 local function attempt(label: string, fn)
 	local ok, result
@@ -120,6 +144,13 @@ local function attempt(label: string, fn)
 		if ok then
 			return true, result
 		end
+
+		local fix = permanentFix(tostring(result))
+		if fix then
+			warn(("[DataService] %s cannot succeed: %s"):format(label, fix))
+			return false, result
+		end
+
 		task.wait(0.5 * 2 ^ (tries - 1))
 	end
 	warn(("[DataService] %s failed after %d attempts: %s")
