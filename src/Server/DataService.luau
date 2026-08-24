@@ -42,7 +42,9 @@ local DEFAULT = {
 	-- Dish ids that were on yesterday's menu. Serving one again today costs
 	-- hype; resting it a single day clears it, because this is simply
 	-- overwritten by whatever menu is run next.
-	lastMenu = {},
+	-- The last Config.MENU_STALE_DAYS menus, newest first. Anything appearing
+	-- in here is stale and costs hype if drafted again.
+	recentMenus = {},
 
 	-- How many dishes can go on the board at once.
 	menuSlots = 3,

@@ -39,18 +39,20 @@ HypeDefs.WeatherDeck = {
 -- run away with a draft.
 HypeDefs.STEP = 0.05
 
--- How far a menu can swing hype either side of the base. Relative rather than
--- absolute so that a rebirth raising the base actually raises what a good menu
--- can reach -- a fixed ceiling would quietly eat the reward.
+-- Tags scale hype rather than adding to it. This matters: base hype is 0.15 for
+-- a new player, so a flat "+0.05" would be a third of their whole counter,
+-- while being trivial to someone rebirthed. As a multiplier, +5% means the same
+-- thing to everyone.
 --
--- Below the floor there is nothing to do; above the ceiling more customers
--- arrive than anyone can physically serve, which is not difficulty, just loss.
-HypeDefs.SWING_DOWN = 0.40
-HypeDefs.SWING_UP = 0.35
+-- These cap how far one menu can swing you either side of your own base. Below
+-- the floor there is nothing to do; above the ceiling more customers arrive
+-- than anyone can physically serve, which is not difficulty, just loss.
+HypeDefs.SWING_DOWN = 0.60   -- worst menu: 60% of base
+HypeDefs.SWING_UP = 1.35     -- best menu: 135% of base
 
--- Absolute limits on the drawn bar, kept wide enough to hold a few rebirths.
-HypeDefs.MIN = 0.60
-HypeDefs.MAX = 2.00
+-- Absolute floor and ceiling, whatever the base. 1.00 is a full house.
+HypeDefs.MIN = 0.05
+HypeDefs.MAX = 1.00
 
 HypeDefs.HEALTHY_PAIR = 2   -- this many healthy dishes gives the bonus
 HypeDefs.FATTY_LIMIT = 3    -- this many fatty dishes starts costing you
@@ -90,12 +92,16 @@ end
 -- Works out hype for one phase, and returns the reasons alongside it so the
 -- draft screen can show its working rather than just a number.
 --
--- `menu` is dish definitions, `yesterday` a set of dish ids served last shift.
+-- `menu` is dish definitions, `stale` a set of dish ids served in the last few
+-- days (see HypeDefs.staleSet).
 -- `base` is where a neutral menu sits: Config.BASE_HYPE plus whatever rebirths
 -- have added. Tags move hype relative to it.
-function HypeDefs.evaluate(menu, phase: string, weatherId: string, yesterday, base: number?): (number, { string })
+function HypeDefs.evaluate(menu, phase: string, weatherId: string, stale, base: number?): (number, { string })
 	local origin = base or Config.BASE_HYPE
-	local hype = origin
+
+	-- Accumulated as a multiplier around 1.0, then applied to the base at the
+	-- end, so every tag is worth the same PROPORTION to every player.
+	local modifier = 1.0
 	local reasons = {}
 
 	local healthy, fatty = 0, 0
@@ -111,59 +117,74 @@ function HypeDefs.evaluate(menu, phase: string, weatherId: string, yesterday, ba
 		end
 
 		if tags.weather and tags.weather == weatherId then
-			hype += HypeDefs.STEP
+			modifier += HypeDefs.STEP
 			table.insert(reasons, ("+%d%% %s suits the weather")
 				:format(HypeDefs.STEP * 100, dish.displayName))
 		end
 
 		if phase == "morning" and tags.breakfast then
-			hype += HypeDefs.STEP
+			modifier += HypeDefs.STEP
 			table.insert(reasons, ("+%d%% %s is a breakfast dish")
 				:format(HypeDefs.STEP * 100, dish.displayName))
 		end
 
 		if phase == "night" and tags.lateNight then
-			hype += HypeDefs.STEP
+			modifier += HypeDefs.STEP
 			table.insert(reasons, ("+%d%% %s sells late")
 				:format(HypeDefs.STEP * 100, dish.displayName))
 		end
 
 		if tags.alwaysHyped then
-			hype += HypeDefs.STEP
+			modifier += HypeDefs.STEP
 			table.insert(reasons, ("+%d%% %s is always wanted")
 				:format(HypeDefs.STEP * 100, dish.displayName))
 		end
 
 		if phase == "morning" and tags.smelly then
-			hype -= HypeDefs.STEP
+			modifier -= HypeDefs.STEP
 			table.insert(reasons, ("-%d%% %s is too much this early")
 				:format(HypeDefs.STEP * 100, dish.displayName))
 		end
 
-		-- Serving the same thing two days running. One day off clears it,
-		-- because yesterday's menu is simply whatever you last ran.
-		if yesterday and yesterday[dish.id] then
-			hype -= HypeDefs.STEP
+		-- Anything served in the last MENU_STALE_DAYS days. Two rather than one
+		-- on purpose: with a one day memory you could alternate between two
+		-- menus forever and never once pay a repeat penalty, which is exactly
+		-- the habit this is meant to discourage.
+		if stale and stale[dish.id] then
+			modifier -= HypeDefs.STEP
 			table.insert(reasons, ("-%d%% %s again so soon")
 				:format(HypeDefs.STEP * 100, dish.displayName))
 		end
 	end
 
 	if healthy >= HypeDefs.HEALTHY_PAIR then
-		hype += HypeDefs.STEP
+		modifier += HypeDefs.STEP
 		table.insert(reasons, ("+%d%% a balanced menu"):format(HypeDefs.STEP * 100))
 	end
 
 	if fatty >= HypeDefs.FATTY_LIMIT then
-		hype -= HypeDefs.STEP
+		modifier -= HypeDefs.STEP
 		table.insert(reasons, ("-%d%% too much fried food"):format(HypeDefs.STEP * 100))
 	end
 
 	return math.clamp(
-		hype,
-		math.max(origin - HypeDefs.SWING_DOWN, HypeDefs.MIN),
-		math.min(origin + HypeDefs.SWING_UP, HypeDefs.MAX)
+		origin * modifier,
+		math.max(origin * HypeDefs.SWING_DOWN, HypeDefs.MIN),
+		math.min(origin * HypeDefs.SWING_UP, HypeDefs.MAX)
 	), reasons
+end
+
+-- Flattens the last few days of menus into one set of "served too recently"
+-- dish ids. Shared so the draft preview and the shift itself cannot disagree
+-- about what counts as stale.
+function HypeDefs.staleSet(recentMenus): { [string]: boolean }
+	local set = {}
+	for _, menu in (recentMenus or {}) do
+		for _, dishId in menu do
+			set[dishId] = true
+		end
+	end
+	return set
 end
 
 -- How many menu dishes carry each chore-provoking tag, for ChoreDefs.roll.

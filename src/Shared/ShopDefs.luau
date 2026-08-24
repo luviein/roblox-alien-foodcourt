@@ -73,6 +73,19 @@ ShopDefs.Upgrades = {
 		perLevel = 0.04,   -- +4% cash per level
 	},
 
+	word = {
+		id = "word",
+		name = "Word of Mouth",
+		blurb = "The station hears about you. Customers arrive noticeably faster.",
+		-- The main growth lever, and the purest raise-the-ceiling upgrade in the
+		-- shop: it makes you busier and richer at once, and never once makes the
+		-- cooking easier. Without it a player who never rebirths would work the
+		-- same quiet counter forever.
+		levels = { 700, 1800, 4000, 8500, 17000 },
+		baseValue = 0,
+		perLevel = 0.05,   -- +5 points of base hype per level
+	},
+
 	patience = {
 		id = "patience",
 		name = "Counter Service",
@@ -98,7 +111,7 @@ ShopDefs.Upgrades = {
 	},
 }
 
-ShopDefs.UpgradeOrder = { "slots", "patience", "tips", "shift" }
+ShopDefs.UpgradeOrder = { "word", "slots", "patience", "tips", "shift" }
 
 -- ------------------------------------------------------------------ query --
 

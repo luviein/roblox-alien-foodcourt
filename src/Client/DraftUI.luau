@@ -464,10 +464,9 @@ function DraftUI.render(refs, profile)
 	refs.weatherLabel.Text = string.upper(conditions.weatherName or "")
 	refs.weatherBlurb.Text = conditions.weatherBlurb or ""
 
-	local yesterday = {}
-	for _, dishId in (profile.lastMenu or {}) do
-		yesterday[dishId] = true
-	end
+	-- Same helper the server uses, so the preview cannot disagree about what
+	-- counts as served too recently.
+	local stale = HypeDefs.staleSet(profile.recentMenus)
 
 	-- Rows are built once, on first render, since the unlocked set only grows
 	-- between shifts and never during this screen.
@@ -521,8 +520,8 @@ function DraftUI.render(refs, profile)
 			end
 		end
 
-		if yesterday[dishId] then
-			chip("YESTERDAY", COLOR.bad)
+		if stale[dishId] then
+			chip("TOO SOON", COLOR.bad)
 		end
 		if tags.weather and tags.weather == conditions.weather then
 			chip(WEATHER_CHIP[tags.weather] or "IN SEASON", COLOR.good)
@@ -548,6 +547,7 @@ function DraftUI.render(refs, profile)
 	-- Where a neutral menu sits for this player. Rebirths raise it, so the bar
 	-- is drawn against their own baseline rather than a fixed 100%.
 	local base = Config.BASE_HYPE
+		+ ShopDefs.valueOf("word", (profile.upgrades and profile.upgrades.word) or 0)
 		+ Config.REBIRTH_HYPE_STEP * (profile.rebirths or 0)
 	local lo = math.max(base - HypeDefs.SWING_DOWN, HypeDefs.MIN)
 	local hi = math.min(base + HypeDefs.SWING_UP, HypeDefs.MAX)
@@ -555,7 +555,7 @@ function DraftUI.render(refs, profile)
 	local allReasons = {}
 	for _, phase in HypeDefs.Phases do
 		local hype, why =
-			HypeDefs.evaluate(defs, phase, conditions.weather or "clear", yesterday, base)
+			HypeDefs.evaluate(defs, phase, conditions.weather or "clear", stale, base)
 		local row = refs.phaseRows[phase]
 
 		row.readout.Text = string.format("%d%%", math.round(hype * 100))

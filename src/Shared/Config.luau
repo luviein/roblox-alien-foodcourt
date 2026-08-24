@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "tune-31"
+Config.BUILD = "slowstart-32"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -27,10 +27,20 @@ Config.MAX_ACTIVE_ORDERS = {
 	{ 0.60, 4 },
 }
 
+-- Seconds between customers AT FULL HYPE (1.00). The real interval is this
+-- divided by current hype.
+--
+-- At the 0.15 a new player opens on, these work out to 24s, 18s and 14s: about
+-- five customers across the whole first shift, arriving one at a time with room
+-- to breathe. At a full house they are 3.6s, 2.7s and 2.1s -- roughly 34 in a
+-- shift, which four order slots can only just contain.
+--
+-- That gap IS the progression. Nothing about the cooking changes; the counter
+-- just stops being quiet.
 Config.SPAWN_INTERVAL = {
-	{ 0.00, 5.0 },
-	{ 0.30, 3.5 },
-	{ 0.60, 2.5 },
+	{ 0.00, 3.6 },
+	{ 0.30, 2.7 },
+	{ 0.60, 2.1 },
 }
 
 -- ---------------------------------------------------------------- score ----
@@ -67,13 +77,25 @@ Config.COMBO_MAX = 3.0             -- multiplier ceiling
 -- so difficulty and economy can be tuned without dragging each other around.
 -- Keeping the score number big and the cash number small is deliberate: the
 -- shift should feel good to finish and the unlock should still feel earned.
-Config.CASH_PER_POINT = 0.30
+-- Raised from 0.30 now that a first shift is five customers rather than
+-- twenty-two: the rate had to come back up or the opening days would pay
+-- almost nothing. This is the knob to turn if unlocks feel too fast or slow --
+-- it moves the economy without touching difficulty.
+Config.CASH_PER_POINT = 0.60
 
 -- ---------------------------------------------------------------- hype -----
--- Where a neutral menu sits before any tag is counted. Not 1.0: the station
--- has a baseline reputation, and rebirths raise it permanently.
-Config.BASE_HYPE = 1.15
-Config.REBIRTH_HYPE_STEP = 0.05
+-- Hype is how busy your counter is, as a fraction of a full house. Nobody has
+-- heard of you yet, so you open at 15% -- a slow trickle of customers with
+-- plenty of room to breathe. Everything you do from there raises it.
+Config.BASE_HYPE = 0.15
+
+-- Each rebirth is worth two more points of base hype, so a rebirthed player
+-- works a permanently busier counter than a fresh one.
+Config.REBIRTH_HYPE_STEP = 0.02
+
+-- A dish stays stale for this many days after you serve it. Two, so you cannot
+-- simply alternate between two menus and never pay a repeat penalty.
+Config.MENU_STALE_DAYS = 2
 
 -- ---------------------------------------------------------------- input ----
 -- "reject"  : a wrong key is refused outright with a short fumble lockout.

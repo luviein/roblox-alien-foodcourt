@@ -70,7 +70,7 @@ local function pushSnapshot(player: Player)
 			upgrades = profile.upgrades,
 			lastEarned = kitchen.lastEarned,
 			day = profile.day,
-			lastMenu = profile.lastMenu,
+			recentMenus = profile.recentMenus,
 			menuSlots = profile.menuSlots,
 			rebirths = profile.rebirths,
 			conditions = conditionsFor(player),
@@ -182,23 +182,20 @@ local function loadoutFor(player: Player, chosen: { string }?)
 	end
 
 	local conditions = conditionsFor(player)
-	local yesterday = {}
-	for _, dishId in ((profile and profile.lastMenu) or {}) do
-		yesterday[dishId] = true
-	end
+	local stale = HypeDefs.staleSet(profile and profile.recentMenus)
+	local upgrades = (profile and profile.upgrades) or {}
 
-	-- Every rebirth permanently raises where a neutral menu sits, so a menu
-	-- that was merely adequate before starts pulling a queue.
+	-- Word of Mouth is bought; rebirths are earned. Both permanently raise where
+	-- a neutral menu sits, which is what turns a quiet counter into a queue.
 	local baseHype = Config.BASE_HYPE
+		+ ShopDefs.valueOf("word", upgrades.word or 0)
 		+ Config.REBIRTH_HYPE_STEP * ((profile and profile.rebirths) or 0)
 
 	local hypeByPhase = {}
 	for _, phase in HypeDefs.Phases do
 		hypeByPhase[phase] =
-			HypeDefs.evaluate(defs, phase, conditions.weather, yesterday, baseHype)
+			HypeDefs.evaluate(defs, phase, conditions.weather, stale, baseHype)
 	end
-
-	local upgrades = (profile and profile.upgrades) or {}
 
 	return {
 		menu = menu,
@@ -236,7 +233,12 @@ local function onStartShift(player: Player, chosenMenu: any)
 		-- Today's menu becomes tomorrow's repeat penalty. Recorded at the
 		-- START of the shift so quitting halfway does not dodge it.
 		DataService.update(player, function(data)
-			data.lastMenu = table.clone(loadout.menu)
+			-- Newest first, trimmed to the staleness window. Recorded at the
+			-- START of the shift so quitting halfway does not dodge it.
+			table.insert(data.recentMenus, 1, table.clone(loadout.menu))
+			while #data.recentMenus > Config.MENU_STALE_DAYS do
+				table.remove(data.recentMenus)
+			end
 		end)
 	end
 
