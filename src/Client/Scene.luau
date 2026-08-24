@@ -16,8 +16,12 @@ local ORIGIN = Vector3.new(0, 500, 0)
 
 -- Composition: camera sits behind the counter looking out over the plate at
 -- the queue. Plate near, customers far, so both read at a glance.
-local CAMERA_POSITION = ORIGIN + Vector3.new(0, 7.6, 11.5)
-local CAMERA_FOCUS    = ORIGIN + Vector3.new(0, 4.4, -2.0)
+-- The bottom ~35% of the screen is the key grid and action bar, so the scene
+-- has to compose its content in the upper two thirds: customers around a third
+-- of the way down, plate just above the keys. Pulled back and higher than the
+-- first pass, which cropped the queue behind the counter.
+local CAMERA_POSITION = ORIGIN + Vector3.new(0, 11.5, 15.5)
+local CAMERA_FOCUS    = ORIGIN + Vector3.new(0, 3.0, -4.5)
 
 local COUNTER_TOP = 3.0
 local PLATE_CENTER = ORIGIN + Vector3.new(0, COUNTER_TOP + 0.18, 1.4)
@@ -80,7 +84,7 @@ function Scene.build()
 	-- Neon signage: cheap, and it sells "alien food court" instantly.
 	part({
 		Name = "NeonA",
-		Size = Vector3.new(46, 0.35, 0.35),
+		Size = Vector3.new(34, 0.22, 0.22),
 		Position = ORIGIN + Vector3.new(0, 11.5, -21.4),
 		Color = PALETTE.neonA,
 		Material = Enum.Material.Neon,
@@ -88,7 +92,7 @@ function Scene.build()
 
 	part({
 		Name = "NeonB",
-		Size = Vector3.new(30, 0.25, 0.25),
+		Size = Vector3.new(22, 0.16, 0.16),
 		Position = ORIGIN + Vector3.new(0, 13.2, -21.4),
 		Color = PALETTE.neonB,
 		Material = Enum.Material.Neon,
@@ -102,10 +106,12 @@ function Scene.build()
 		Color = PALETTE.counter,
 	}, folder)
 
+	-- A trim strip along the FRONT edge only. Covering the whole countertop in
+	-- neon (the first pass) blew out the bottom third of the frame.
 	part({
 		Name = "CounterTrim",
-		Size = Vector3.new(20.3, 0.18, 5.3),
-		Position = ORIGIN + Vector3.new(0, COUNTER_TOP + 0.04, 0.5),
+		Size = Vector3.new(20.3, 0.12, 0.3),
+		Position = ORIGIN + Vector3.new(0, COUNTER_TOP + 0.02, 3.0),
 		Color = PALETTE.trim,
 		Material = Enum.Material.Neon,
 	}, folder)
@@ -121,8 +127,8 @@ function Scene.build()
 	plateMesh.Parent = plate
 
 	local plateLight = Instance.new("PointLight")
-	plateLight.Brightness = 1.6
-	plateLight.Range = 16
+	plateLight.Brightness = 0.9
+	plateLight.Range = 11
 	plateLight.Color = Color3.fromRGB(255, 240, 214)
 	plateLight.Parent = plate
 
@@ -173,7 +179,7 @@ end
 function Scene.lockCamera()
 	local camera = workspace.CurrentCamera
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.FieldOfView = 62
+	camera.FieldOfView = 55
 
 	local locked = CFrame.lookAt(CAMERA_POSITION, CAMERA_FOCUS)
 	camera.CFrame = locked
