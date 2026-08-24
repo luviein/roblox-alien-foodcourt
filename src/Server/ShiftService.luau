@@ -128,6 +128,12 @@ local function onStationAction(player: Player, payload: any)
 		end
 		kitchen:selectSlot(slot)
 
+	elseif action == "searStart" then
+		kitchen:searStart()
+
+	elseif action == "searEnd" then
+		kitchen:searEnd()
+
 	elseif action == "selectOrder" then
 		local orderId = payload.orderId
 		if typeof(orderId) ~= "number" then

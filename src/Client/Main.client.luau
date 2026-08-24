@@ -15,6 +15,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local DishDefs = require(Shared.DishDefs)
 local Remotes = require(Shared.Remotes)
 
 local Audio = require(script.Parent.Audio)
@@ -127,10 +128,28 @@ local SLOT_KEYS = {
 	[Enum.KeyCode.Four] = 4,
 }
 
-local function handleInput(_actionName: string, inputState: Enum.UserInputState, input: InputObject)
-	if inputState ~= Enum.UserInputState.Begin then
-		return Enum.ContextActionResult.Pass
+-- The sear key for whatever is currently in hand, or nil. Only live once the
+-- prep steps are done and the grill has not been used yet.
+local function searKeyFor(snap): string?
+	if not snap or not snap.activeOrderId then
+		return nil
 	end
+	for _, order in snap.orders do
+		if order.id == snap.activeOrderId then
+			if order.searState ~= "waiting" and order.searState ~= "searing" then
+				return nil
+			end
+			if #snap.build < #order.required then
+				return nil   -- still prepping
+			end
+			local dish = DishDefs.get(order.dishId)
+			return dish and dish.sear and dish.sear.key or nil
+		end
+	end
+	return nil
+end
+
+local function handleInput(_actionName: string, inputState: Enum.UserInputState, input: InputObject)
 	if UserInputService:GetFocusedTextBox() then
 		return Enum.ContextActionResult.Pass
 	end
@@ -140,6 +159,22 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 
 	local keyCode = input.KeyCode
 	local inService = snapshot ~= nil and snapshot.state == "Service"
+
+	-- Searing is the one action that cares about the key coming back UP: the
+	-- meter runs while it is held and the grade is decided by where it is when
+	-- you let go.
+	if inService and INGREDIENT_KEYS[keyCode] and searKeyFor(snapshot) == INGREDIENT_KEYS[keyCode] then
+		if inputState == Enum.UserInputState.Begin then
+			sendAction({ action = "searStart" })
+		elseif inputState == Enum.UserInputState.End then
+			sendAction({ action = "searEnd" })
+		end
+		return Enum.ContextActionResult.Sink
+	end
+
+	if inputState ~= Enum.UserInputState.Begin then
+		return Enum.ContextActionResult.Pass
+	end
 
 	-- E doubles as an ingredient key during service and as the start/continue
 	-- key outside it. Gating on state keeps both bindings clean.

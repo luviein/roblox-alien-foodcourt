@@ -151,6 +151,54 @@ local function buildPlateReadout(parent: Instance)
 	return label
 end
 
+-- The sear meter: a bar that fills while the key is held, with the target band
+-- drawn on it. The band has to be visible before you start holding, otherwise
+-- the first steak of every session is a guess.
+local function buildSearMeter(parent: Instance)
+	local track = make("Frame", {
+		Name = "SearMeter",
+		BackgroundColor3 = COLOR.bg,
+		BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0.155),
+		Size = UDim2.fromScale(0.8, 0.1),
+		Visible = false,
+	}, parent)
+	corner(track, 6)
+
+	-- Drawn under the fill so the fill visibly crosses into it.
+	local band = make("Frame", {
+		Name = "Band",
+		BackgroundColor3 = COLOR.good,
+		BackgroundTransparency = 0.55,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(0.25, 1),
+		Position = UDim2.fromScale(0.6, 0),
+	}, track)
+
+	local fill = make("Frame", {
+		Name = "Fill",
+		BackgroundColor3 = COLOR.warn,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(0, 1),
+	}, track)
+	corner(fill, 6)
+
+	local label = make("TextLabel", {
+		Name = "Label",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		ZIndex = 3,
+	}, track)
+	make("UITextSizeConstraint", { MaxTextSize = 16 }, label)
+
+	return { track = track, band = band, fill = fill, label = label }
+end
+
 local function buildKeyGrid(parent: Instance, onKey: (string) -> ())
 	local grid = make("Frame", {
 		Name = "KeyGrid",
@@ -439,6 +487,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		hint = hint,
 		topBar = buildTopBar(root),
 		plateReadout = buildPlateReadout(prep),
+		searMeter = buildSearMeter(prep),
 		keyGrid = buildKeyGrid(prep, callbacks.onKey),
 		actionBar = buildActionBar(prep, callbacks.onServe, callbacks.onScrap),
 		overlay = buildOverlay(root, callbacks.onStart),
@@ -505,7 +554,9 @@ function UI.render(refs, snapshot)
 
 	-- SPACE is the commit key for every dish, but it commits different things:
 	-- lower the basket, hand over the plate, collect what is ready.
-	if cookState == "raw" then
+	if activeOrder and activeOrder.searState and activeOrder.searState ~= "done" then
+		refs.actionBar.serve.Text = "SERVE  [space]"
+	elseif cookState == "raw" then
 		refs.actionBar.serve.Text = "FRY  [space]"
 	elseif cookState == "ready" then
 		refs.actionBar.serve.Text = "COLLECT  [space]"
@@ -520,6 +571,24 @@ function UI.render(refs, snapshot)
 	-- from both places is what made it flicker.
 	local cookState = activeOrder and activeOrder.cookState
 
+	-- Sear meter: shown once the prep steps are done, so the band is on screen
+	-- before the first hold rather than discovered by ruining a steak.
+	local searDish = if activeOrder then DishDefs.get(activeOrder.dishId) else nil
+	local sear = searDish and searDish.sear
+	local showSear = sear ~= nil
+		and activeOrder.searState ~= nil
+		and activeOrder.searState ~= "done"
+		and #snapshot.build >= #activeOrder.required
+
+	refs.searMeter.track.Visible = showSear == true
+	if showSear then
+		refs.searMeter.band.Position = UDim2.fromScale(sear.perfectFrom, 0)
+		refs.searMeter.band.Size = UDim2.fromScale(sear.perfectTo - sear.perfectFrom, 1)
+		refs.searMeter.label.Text = if activeOrder.searState == "searing"
+			then "let go in the green"
+			else ("hold %s to %s"):format(sear.key, string.lower(sear.label:gsub(" %(hold%)", "")))
+	end
+
 	local steps = if activeOrder then #activeOrder.required else 0
 	local doneSteps = #snapshot.build
 
@@ -529,6 +598,12 @@ function UI.render(refs, snapshot)
 			else string.format("STEP  %d / %d", doneSteps, steps)
 	elseif cookState == "burnt" then
 		refs.plateReadout.Text = "BURNT   SPACE to bin it"
+	elseif showSear then
+		-- The meter carries the instruction; the readout would only repeat it.
+		refs.plateReadout.Text = ""
+	elseif activeOrder and activeOrder.searState == "done" then
+		refs.plateReadout.Text = ("SEARED  %s   SPACE to serve"):format(
+			string.upper(activeOrder.searGrade or "?"))
 	elseif cookState ~= "cooking" and cookState ~= "ready" then
 		local total = if activeOrder then #activeOrder.required else 0
 		refs.plateReadout.Text = if state == "Service" and total > 0
@@ -618,6 +693,22 @@ function UI.renderTimers(refs, snapshot)
 		if order.id == snapshot.activeOrderId then
 			active = order
 			break
+		end
+	end
+
+	-- Sear meter fills per frame. This one genuinely has to: the whole
+	-- interaction is releasing at the right moment, and a bar that only moves
+	-- ten times a second is not something you can time against.
+	if active and active.searState == "searing" and refs.searMeter.track.Visible then
+		local dish = DishDefs.get(active.dishId)
+		local sear = dish and dish.sear
+		if sear then
+			local fraction = (clock - active.searStartedAt) / sear.duration
+			refs.searMeter.fill.Size = UDim2.fromScale(math.clamp(fraction, 0, 1), 1)
+			refs.searMeter.fill.BackgroundColor3 = if fraction > 1
+				then COLOR.bad
+				elseif fraction >= sear.perfectFrom and fraction <= sear.perfectTo then COLOR.good
+				else COLOR.warn
 		end
 	end
 

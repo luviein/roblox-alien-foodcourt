@@ -302,6 +302,17 @@ function Kitchen:serve()
 		return
 	end
 
+	-- Grilled orders: the sear has to be finished before it can be handed over,
+	-- and the grade is the worse of the sear and the customer's patience.
+	if order.searState then
+		if order.searState ~= "done" then
+			return
+		end
+		local patienceGrade = ScoreService.grade(order, now(), true)
+		self:award(order, ScoreService.worst(order.searGrade or "Sloppy", patienceGrade))
+		return
+	end
+
 	if #self.build == 0 then
 		return
 	end
@@ -413,6 +424,57 @@ function Kitchen:handleFryOrder(order): boolean
 	return true
 end
 
+-- ----------------------------------------------------------------- grill ---
+
+-- Holding the sear key. The meter starts the moment the key goes down and the
+-- grade is decided by where it is when you let go, so the whole interaction is
+-- one press held for the right length of time.
+function Kitchen:searStart()
+	if self.state ~= "Service" then
+		return
+	end
+
+	local order = self:activeOrder()
+	if not order or not order.searState or order.searState ~= "waiting" then
+		return
+	end
+
+	-- The prep steps have to be done first: you cannot sear an empty grill.
+	if not buildMatches(self.build, order.required) then
+		return
+	end
+
+	order.searState = "searing"
+	order.searStartedAt = now()
+	self:emit({ type = "searStarted", orderId = order.id, startedAt = order.searStartedAt })
+end
+
+function Kitchen:searEnd()
+	if self.state ~= "Service" then
+		return
+	end
+
+	local order = self:activeOrder()
+	if not order or order.searState ~= "searing" then
+		return
+	end
+
+	local dish = DishDefs.get(order.dishId)
+	local sear = dish and dish.sear
+	local elapsed = now() - order.searStartedAt
+	local fraction = elapsed / (sear and sear.duration or 1)
+
+	order.searState = "done"
+	order.searGrade = ScoreService.searGrade(fraction, sear)
+
+	self:emit({
+		type = "searFinished",
+		orderId = order.id,
+		grade = order.searGrade,
+		fraction = fraction,
+	})
+end
+
 -- ----------------------------------------------------------------- tick ----
 
 function Kitchen:tick()
@@ -421,6 +483,20 @@ function Kitchen:tick()
 	end
 
 	local t = now()
+
+	-- Anything left on the grill burns. Unlike the fryer this cannot be left
+	-- and returned to: it is ruined a couple of seconds after it is done.
+	for _, order in self.orders do
+		if order.searState == "searing" then
+			local dish = DishDefs.get(order.dishId)
+			local sear = dish and dish.sear
+			if sear and (t - order.searStartedAt) > sear.duration * 1.25 then
+				order.searState = "done"
+				order.searGrade = "Fail"
+				self:emit({ type = "searBurnt", orderId = order.id })
+			end
+		end
+	end
 
 	-- Fried orders cook whether or not anyone is looking at them. This loop is
 	-- the reason walking away costs something.
@@ -485,6 +561,9 @@ function Kitchen:snapshot()
 			cookState = order.cookState,
 			readyAt = order.readyAt,
 			burnAt = order.burnAt,
+			searState = order.searState,
+			searStartedAt = order.searStartedAt,
+			searGrade = order.searGrade,
 			required = order.required,
 			keys = order.keys,
 			createdAt = order.createdAt,

@@ -59,6 +59,22 @@ function ScoreService.fryGrade(overshoot: number, fry): Grade
 	return "Sloppy"
 end
 
+-- Where the meter was when the key came up, as a fraction of a full cook.
+-- Under-done is recoverable-ish; over 1.0 is charcoal.
+function ScoreService.searGrade(fraction: number, sear): Grade
+	if not sear then
+		return "Sloppy"
+	end
+	if fraction > 1 then
+		return "Fail"
+	elseif fraction >= sear.perfectFrom and fraction <= sear.perfectTo then
+		return "Perfect"
+	elseif fraction >= sear.goodFrom and fraction <= sear.goodTo then
+		return "Good"
+	end
+	return "Sloppy"
+end
+
 local GRADE_RANK = { Perfect = 4, Good = 3, Sloppy = 2, Fail = 1 }
 
 -- The lower of two grades. A fried order is judged on both the pull and the

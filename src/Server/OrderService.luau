@@ -96,6 +96,11 @@ function OrderService.create(bag: Bag, orderId: number, now: number): Order
 		cookState = if dish.fry then "raw" else nil,
 		readyAt = 0,
 		burnAt = 0,
+		-- Same idea for the grill: presence of searState is what marks an
+		-- order as seared rather than assembled.
+		searState = if dish.sear then "waiting" else nil,
+		searStartedAt = 0,
+		searGrade = nil,
 		required = required,
 		keys = keys,
 		createdAt = now,
