@@ -44,6 +44,11 @@ SoundDefs.Sfx = {
 }
 
 -- Played in order, then looped back to the start.
+-- Trims the tracks themselves before the slider is applied. Music assets are
+-- usually mastered far louder than short effects, so without this the slider
+-- spends its whole range fighting the source material.
+SoundDefs.MusicGain = 0.45
+
 SoundDefs.Music = {
 	85881788376421,
 	90665611745011,

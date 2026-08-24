@@ -1,8 +1,5 @@
 --!strict
 -- Sound effects and the background playlist.
---
--- Two SoundGroups carry the volume sliders, so changing a setting is one
--- property write rather than a walk over every live sound.
 
 local ContentProvider = game:GetService("ContentProvider")
 local Debris = game:GetService("Debris")
@@ -21,6 +18,14 @@ local musicGroup: SoundGroup
 local musicPlayer: Sound
 local trackIndex = 0
 local lastVolumeBlip = 0
+
+-- Volume is written onto each Sound directly rather than relying on the
+-- SoundGroup to attenuate it. The group is still there for routing, but a
+-- slider that visibly moves and changes nothing audible is worse than no
+-- slider, and this removes any dependence on how group volume composes.
+local function musicVolume(): number
+	return Settings.values.musicVolume * SoundDefs.MusicGain
+end
 
 -- --------------------------------------------------------------- helpers ---
 
@@ -59,6 +64,7 @@ local function playNextTrack()
 
 		-- A track that failed to load reports no length.
 		if musicPlayer.TimeLength > 0 then
+			musicPlayer.Volume = musicVolume()
 			musicPlayer:Play()
 			return
 		end
@@ -102,7 +108,7 @@ function Audio.play(name: string)
 
 	local sound = Instance.new("Sound")
 	sound.SoundId = assetUrl(def.id)
-	sound.Volume = def.volume
+	sound.Volume = def.volume * Settings.values.sfxVolume
 	sound.SoundGroup = sfxGroup
 
 	if def.pitchJitter > 0 then
@@ -133,18 +139,18 @@ function Audio.init()
 
 	sfxGroup = Instance.new("SoundGroup")
 	sfxGroup.Name = "AFC_Sfx"
-	sfxGroup.Volume = Settings.values.sfxVolume
+	sfxGroup.Volume = 1
 	sfxGroup.Parent = SoundService
 
 	musicGroup = Instance.new("SoundGroup")
 	musicGroup.Name = "AFC_Music"
-	musicGroup.Volume = Settings.values.musicVolume
+	musicGroup.Volume = 1
 	musicGroup.Parent = SoundService
 
 	musicPlayer = Instance.new("Sound")
 	musicPlayer.Name = "AFC_MusicPlayer"
 	musicPlayer.Looped = false          -- advanced manually, to cycle the list
-	musicPlayer.Volume = 1
+	musicPlayer.Volume = musicVolume()
 	musicPlayer.SoundGroup = musicGroup
 	musicPlayer.Parent = SoundService
 	musicPlayer.Ended:Connect(function()
@@ -153,7 +159,8 @@ function Audio.init()
 
 	Settings.changed.Event:Connect(function(key: string, value: any)
 		if key == "sfxVolume" then
-			sfxGroup.Volume = value
+			-- Live SFX are one-shots and already gone; the next one picks up
+			-- the new value when it is created.
 			-- Audible feedback while adjusting, throttled: dragging the slider
 			-- fires this many times a second otherwise.
 			if os.clock() - lastVolumeBlip > 0.12 then
@@ -161,7 +168,7 @@ function Audio.init()
 				Audio.play("click")
 			end
 		elseif key == "musicVolume" then
-			musicGroup.Volume = value
+			musicPlayer.Volume = musicVolume()
 		end
 	end)
 end
