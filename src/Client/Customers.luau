@@ -256,7 +256,13 @@ local function rigPool(): { Model }
 end
 
 -- A real R15 customer, cloned from the server-built pool.
-local function buildRigCustomer()
+--
+-- `parent` matters, and is the whole reason this takes an argument: an R15
+-- character assembles its Motor6D joints from attachment pairs when it enters
+-- the world. Before it is parented the model carries attachments and NO
+-- joints, so binding the animator first found nothing to drive and every
+-- customer stood in a T-pose while being slid around.
+local function buildRigCustomer(parent: Instance)
 	local pool = rigPool()
 	if #pool == 0 then
 		return nil
@@ -274,25 +280,27 @@ local function buildRigCustomer()
 
 	model.PrimaryPart = root
 
+	-- Into the world FIRST. Everything below depends on the rig being built.
+	model.Parent = parent
+
 	-- Belt and braces: the server already disables this, but a rig that
 	-- somehow arrives with it on will silently ignore every pose we write.
 	humanoid.AutomaticScalingEnabled = false
 
-	-- Joint driver. Returns nil if this is not an R15 rig, in which case the
-	-- customer simply stands still rather than erroring.
+	-- Ask explicitly rather than trusting parenting to have done it. Harmless
+	-- if the joints already exist; not available on R6, hence the pcall.
+	pcall(function()
+		humanoid:BuildRigFromAttachments()
+	end)
+
 	-- true: catalog rigs arrive T-posed and need the rest offset applied.
 	local rig, jointNames = NpcAnimator.bind(model, true)
+
 	if not rig and not warnedNoJoints then
 		warnedNoJoints = true
-		local found = {}
-		for _, descendant in model:GetDescendants() do
-			if descendant:IsA("Motor6D") then
-				table.insert(found, descendant.Name)
-			end
-		end
 		warn(("[AlienFoodCourt] no poseable joints on customer rig -- walk and "
 			.. "reaction poses disabled. Motor6Ds found: %s")
-			:format(if #found > 0 then table.concat(found, ", ") else "none"))
+			:format(if jointNames and #jointNames > 0 then table.concat(jointNames, ", ") else "none"))
 	end
 
 	-- Impatience is shown by tinting the whole customer rather than recolouring
@@ -319,7 +327,7 @@ local function buildRigCustomer()
 		drawnFace = Face.attach(head)
 	end
 
-	return {
+	local body = {
 		kind = "rig",
 		model = model,
 		root = root,
@@ -331,14 +339,32 @@ local function buildRigCustomer()
 		jointNames = jointNames,
 		face = drawnFace,
 	}
+
+	-- Safety net: if the rig assembles a frame late, pick the joints up then
+	-- rather than leaving this customer permanently unposeable.
+	if not rig then
+		task.defer(function()
+			if not model.Parent then
+				return
+			end
+			local retryRig, retryNames = NpcAnimator.bind(model, true)
+			if retryRig then
+				body.rig = retryRig
+				body.jointNames = retryNames
+			end
+		end)
+	end
+
+	return body
 end
 
 -- Fallback: the procedural alien. Built from primitives but jointed and
 -- headed like a real character, so it takes the same animator and the same
 -- drawn face as an R15 rig -- no second code path, and no silent loss of
 -- limbs or expression when the avatar pool fails to build.
-local function buildAlienCustomer()
+local function buildAlienCustomer(parent: Instance)
 	local alien = Alien.build(nextSeed)
+	alien.model.Parent = parent
 	nextSeed += 1
 
 	local highlight = Instance.new("Highlight")
@@ -411,14 +437,13 @@ local function reportBody(body)
 end
 
 local function spawnCustomer(order)
-	local body = buildRigCustomer() or buildAlienCustomer()
+	local body = buildRigCustomer(scene.folder) or buildAlienCustomer(scene.folder)
 
 	if not reportedFirst then
 		reportedFirst = true
 		reportBody(body)
 	end
 
-	body.model.Parent = scene.folder
 
 	local bill = buildBillboard(body.adornee, body.billboardOffset)
 	local reaction = buildReactionBubble(body.adornee, body.billboardOffset - 0.5)
