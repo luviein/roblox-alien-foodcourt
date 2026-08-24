@@ -181,17 +181,46 @@ end
 -- connected them. Kept as a hook in case a rig does need correcting.
 local REST_OFFSET = {}
 
--- Two kinds of skeleton pose two different ways, so each joint carries its own
--- setter rather than the animation code branching on type everywhere.
+-- Three kinds of skeleton, three ways to pose one, so each joint carries its
+-- own setter rather than the animation code branching on type everywhere.
 --
---   Motor6D : classic rig. Pose by offsetting C0 from its resting value.
---   Bone    : skinned rig. Pose by writing Transform, which is already
---             relative to the bind pose, so there is no base to offset from.
+--   Motor6D             : classic rig. Offset C0 from its resting value.
+--   AnimationConstraint : constraint rig -- what CreateHumanoidModelFromDescription
+--                         actually produces. Write Transform. Physics-driven,
+--                         so it also needs the torque and responsiveness to
+--                         actually follow what we ask for.
+--   Bone                : skinned rig. Write Transform.
 --
--- Writing C0 on a skinned rig does nothing at all, which is exactly the
--- failure that made these customers look like an animation bug.
+-- Writing C0 on a constraint rig does nothing whatsoever. That is the entire
+-- reason these customers looked like an animation bug for so long: the joints
+-- were present and correctly named the whole time, just not the class anything
+-- here was looking for. It also explains why the body never fell apart despite
+-- having no Motor6Ds -- the constraints were holding it together.
 local function jointHandle(instance: Instance, rest: CFrame?)
-	if instance:IsA("Motor6D") then
+	if instance:IsA("AnimationConstraint") then
+		-- Capture the current Transform as the rest pose rather than assuming
+		-- identity, so binding never snaps the rig out of its bind pose.
+		local base = instance.Transform * (rest or CFrame.identity)
+
+		-- Make it track exactly instead of springing toward the target.
+		pcall(function()
+			instance.IsKinematic = true
+		end)
+		pcall(function()
+			instance.MaxTorque = math.huge
+			instance.MaxForce = math.huge
+			instance.Responsiveness = 200
+		end)
+
+		return {
+			apply = function(offset: CFrame)
+				instance.Transform = base * offset
+			end,
+			clear = function()
+				instance.Transform = base
+			end,
+		}
+	elseif instance:IsA("Motor6D") then
 		local base = instance.C0 * (rest or CFrame.identity)
 		return {
 			apply = function(offset: CFrame)
@@ -221,7 +250,7 @@ function NpcAnimator.bind(model: Model, tPosed: boolean?): Rig?
 	local found = {}
 	local names = {}
 	for _, descendant in model:GetDescendants() do
-		if descendant:IsA("Motor6D") or descendant:IsA("Bone") then
+		if descendant:IsA("Motor6D") or descendant:IsA("Bone") or descendant:IsA("AnimationConstraint") then
 			found[descendant.Name] = descendant
 			table.insert(names, descendant.ClassName .. ":" .. descendant.Name)
 		end
