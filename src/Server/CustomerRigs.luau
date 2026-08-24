@@ -19,6 +19,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local AvatarPool = require(Shared.AvatarPool)
 
+local CatalogSource = require(script.Parent.CatalogSource)
+
 local CustomerRigs = {}
 
 local FOLDER_NAME = "CustomerRigs"
@@ -32,12 +34,14 @@ local function accessoryString(id: number?): string
 	return if id then tostring(id) else ""
 end
 
-local function buildDescription(rng: Random): HumanoidDescription
+-- `pools` comes from CatalogSource: hand-picked ids where you supplied them,
+-- live catalog results where you did not, and every id already verified.
+local function buildDescription(rng: Random, pools): HumanoidDescription
 	local description = Instance.new("HumanoidDescription")
 
-	local shirt = AvatarPool.pick(AvatarPool.Shirts, rng)
-	local pants = AvatarPool.pick(AvatarPool.Pants, rng)
-	local face = AvatarPool.pick(AvatarPool.Faces, rng)
+	local shirt = AvatarPool.pick(pools.Shirts, rng)
+	local pants = AvatarPool.pick(pools.Pants, rng)
+	local face = AvatarPool.pick(pools.Faces, rng)
 
 	if shirt then
 		description.Shirt = shirt
@@ -49,9 +53,9 @@ local function buildDescription(rng: Random): HumanoidDescription
 		description.Face = face
 	end
 
-	description.HairAccessory = accessoryString(AvatarPool.pick(AvatarPool.Hair, rng))
-	description.HatAccessory = accessoryString(AvatarPool.pick(AvatarPool.Hats, rng))
-	description.FaceAccessory = accessoryString(AvatarPool.pick(AvatarPool.FaceAccessories, rng))
+	description.HairAccessory = accessoryString(AvatarPool.pick(pools.Hair, rng))
+	description.HatAccessory = accessoryString(AvatarPool.pick(pools.Hats, rng))
+	description.FaceAccessory = accessoryString(AvatarPool.pick(pools.FaceAccessories, rng))
 
 	-- Body colour needs no assets, so this carries the variety on its own.
 	local tones = AvatarPool.tones()
@@ -111,11 +115,14 @@ function CustomerRigs.build()
 
 	-- Yields on web calls, so never block server startup on it.
 	task.spawn(function()
+		-- Resolve and verify the asset pools first; both steps make web calls.
+		local pools = CatalogSource.resolve()
+
 		local rng = Random.new()
 		local built = 0
 
 		for index = 1, AvatarPool.POOL_SIZE do
-			local description = buildDescription(rng)
+			local description = buildDescription(rng, pools)
 
 			local ok, result = pcall(function()
 				return Players:CreateHumanoidModelFromDescription(
