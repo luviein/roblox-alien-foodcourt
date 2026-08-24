@@ -94,14 +94,29 @@ end
 -- Everything needed is already on the model, so we can just do it: pair the
 -- attachments up and make the joints. Skips any joint that already exists, so
 -- it is safe to call on a properly assembled rig.
-function NpcAnimator.buildJoints(model: Model): number
+function NpcAnimator.buildJoints(model: Model): (number, string)
 	local created = 0
+	local notes = {}
 
 	for _, spec in R15_JOINTS do
 		local jointName, parentName, childName, pivotMode = spec[1], spec[2], spec[3], spec[4]
 
 		local parentPart = model:FindFirstChild(parentName)
 		local childPart = model:FindFirstChild(childName)
+
+		-- Say why, per joint. Reasoning about why "nothing was created" from
+		-- the outside has cost several rounds; the loop knows the answer.
+		if not parentPart then
+			table.insert(notes, jointName .. ":noParent(" .. parentName .. ")")
+		elseif not childPart then
+			table.insert(notes, jointName .. ":noChild(" .. childName .. ")")
+		elseif not parentPart:IsA("BasePart") then
+			table.insert(notes, jointName .. ":parentIs" .. parentPart.ClassName)
+		elseif not childPart:IsA("BasePart") then
+			table.insert(notes, jointName .. ":childIs" .. childPart.ClassName)
+		elseif childPart:FindFirstChild(jointName) then
+			table.insert(notes, jointName .. ":exists")
+		end
 
 		if parentPart and childPart
 			and parentPart:IsA("BasePart") and childPart:IsA("BasePart")
@@ -147,7 +162,7 @@ function NpcAnimator.buildJoints(model: Model): number
 		end
 	end
 
-	return created
+	return created, table.concat(notes, " ")
 end
 
 -- R15 rigs built by CreateHumanoidModelFromDescription arrive in a T-pose:

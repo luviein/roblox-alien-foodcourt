@@ -297,7 +297,7 @@ local function buildRigCustomer(parent: Instance)
 	-- These rigs arrive with every rig attachment and no joints at all, and
 	-- BuildRigFromAttachments reports success while creating nothing. Assemble
 	-- them ourselves; skips anything already jointed.
-	local jointsMade = NpcAnimator.buildJoints(model)
+	local jointsMade, jointNotes = NpcAnimator.buildJoints(model)
 
 	-- A Motor6D cannot move an anchored part. Set this explicitly after the
 	-- joints exist rather than trusting how the rig arrived: an anchored limb
@@ -331,14 +331,15 @@ local function buildRigCustomer(parent: Instance)
 		end
 	end
 
-	local diagnostic = ("rigType=%s buildRig=%s joints_made=%d anchored=%d | parts=%d motor6d=%d weld=%d weldcon=%d attach=%d\nchildren: %s")
+	local diagnostic = ("rigType=%s buildRig=%s joints_made=%d anchored=%d | parts=%d motor6d=%d weld=%d weldcon=%d attach=%d\nchildren: %s\nwhy: %s")
 		:format(
 			humanoid.RigType.Name,
 			if buildOk then "ok" else ("FAILED: " .. tostring(buildErr)),
 			jointsMade,
 			anchoredParts,
 			census.BasePart, census.Motor6D, census.Weld, census.WeldConstraint, census.Attachment,
-			table.concat(childNames, ", ")
+			table.concat(childNames, ", "),
+			if jointNotes ~= "" then jointNotes else "(all 15 joints created)"
 		)
 
 	-- true: catalog rigs arrive T-posed and need the rest offset applied.
@@ -475,7 +476,7 @@ local function reportBody(body)
 		BackgroundTransparency = 0.15,
 		BorderSizePixel = 0,
 		Position = UDim2.fromScale(0.005, 0.12),
-		Size = UDim2.fromScale(0.62, 0.16),
+		Size = UDim2.fromScale(0.72, 0.22),
 		Font = Enum.Font.Code,
 		Text = text,
 		TextColor3 = if body.rig then Color3.fromRGB(120, 230, 150) else Color3.fromRGB(255, 120, 110),
