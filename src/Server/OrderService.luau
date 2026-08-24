@@ -91,6 +91,11 @@ function OrderService.create(bag: Bag, orderId: number, now: number): Order
 		id = orderId,
 		dishId = dishId,
 		station = dish.station,
+		-- Only fried dishes carry a cook state; its presence is what marks an
+		-- order as "cooked rather than assembled" everywhere else.
+		cookState = if dish.fry then "raw" else nil,
+		readyAt = 0,
+		burnAt = 0,
 		required = required,
 		keys = keys,
 		createdAt = now,

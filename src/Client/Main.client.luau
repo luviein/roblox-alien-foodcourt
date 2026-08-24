@@ -49,7 +49,6 @@ local scene = Scene.build()
 Scene.lockCamera()
 Scene.parkCharacter()
 
-Customers.init(scene)
 FoodStack.init(scene)
 Audio.init()
 
@@ -59,30 +58,26 @@ local function sendAction(payload)
 	Remotes.StationAction:FireServer(payload)
 end
 
--- The letter keys mean different things at different stations. At Prep they
--- are ingredients; at the Fryer, Q and W are the two baskets and everything
--- else is dead. One grid, relabelled per station.
-local FRYER_BASKET_KEYS = { Q = 1, W = 2 }
-
 local function onKey(key: string)
 	if not snapshot or snapshot.state ~= "Service" then
 		return
 	end
-
-	if snapshot.activeStation == "Fryer" then
-		local basket = FRYER_BASKET_KEYS[key]
-		if basket then
-			sendAction({ action = "basket", index = basket })
-		end
-		return
-	end
-
 	sendAction({ action = "ingredient", key = key })
 end
 
-local function onStation(index: number)
-	sendAction({ action = "station", index = index })
+local function onSelect(slot: number)
+	sendAction({ action = "select", slot = slot })
 end
+
+-- Clicking a customer's ticket picks up that order, which is how you reach one
+-- that is not simply next in line.
+local function onSelectOrder(orderId: number)
+	sendAction({ action = "selectOrder", orderId = orderId })
+end
+
+-- Initialised here rather than with the other subsystems: it needs the click
+-- handler above, which needs sendAction.
+Customers.init(scene, onSelectOrder)
 
 local function onServe()
 	sendAction({ action = "serve" })
@@ -103,7 +98,7 @@ local refs = UI.build(playerGui, {
 	onKey = onKey,
 	onServe = onServe,
 	onScrap = onScrap,
-	onStation = onStation,
+	onSelect = onSelect,
 	onStart = onStart,
 })
 
@@ -124,8 +119,8 @@ local INGREDIENT_KEYS = {
 	[Enum.KeyCode.G] = "G",
 }
 
--- 1-4 now walks to a station rather than picking a ticket.
-local STATION_KEYS = {
+-- 1-4 picks up the ticket in that slot.
+local SLOT_KEYS = {
 	[Enum.KeyCode.One] = 1,
 	[Enum.KeyCode.Two] = 2,
 	[Enum.KeyCode.Three] = 3,
@@ -159,8 +154,8 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 		onServe()
 	elseif keyCode == Enum.KeyCode.X then
 		onScrap()
-	elseif STATION_KEYS[keyCode] then
-		onStation(STATION_KEYS[keyCode])
+	elseif SLOT_KEYS[keyCode] then
+		onSelect(SLOT_KEYS[keyCode])
 	elseif INGREDIENT_KEYS[keyCode] then
 		onKey(INGREDIENT_KEYS[keyCode])
 	end

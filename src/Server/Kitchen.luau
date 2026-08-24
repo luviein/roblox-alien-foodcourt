@@ -11,7 +11,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local DishDefs = require(Shared.DishDefs)
-local StationDefs = require(Shared.StationDefs)
 
 local OrderService = require(script.Parent.OrderService)
 local ScoreService = require(script.Parent.ScoreService)
@@ -45,27 +44,9 @@ function Kitchen.new(participants: { Player })
 	self.bag = OrderService.newBag()
 	self.nextOrderId = 1
 
-	-- Which station the player is standing at. 1-4 moves between them.
-	self.activeStation = StationDefs.Order[1]
-
-	-- Prep counter working state. These predate the station system; renaming
-	-- them into a nested table would buy nothing.
+	-- The ticket being worked on, and the plate being built for it.
 	self.activeOrderId = nil
 	self.build = {}
-
-	-- Fryer baskets. Each is either empty or cooking one specific order, and it
-	-- keeps cooking whether or not the player is standing there -- which is the
-	-- entire point of the station.
-	self.baskets = {}
-	local fryer = StationDefs.get("Fryer")
-	for index = 1, (fryer and fryer.baskets or 0) do
-		self.baskets[index] = {
-			state = "empty",   -- empty | cooking | ready | burnt
-			orderId = nil,
-			readyAt = 0,
-			burnAt = 0,
-		}
-	end
 
 	self.score = 0
 	self.combo = 0
@@ -115,11 +96,6 @@ function Kitchen:startShift()
 	self.stats = {
 		served = 0, perfect = 0, good = 0, sloppy = 0, failed = 0, expired = 0,
 	}
-	self.activeStation = StationDefs.Order[1]
-	for _, basket in self.baskets do
-		basket.state = "empty"
-		basket.orderId = nil
-	end
 	self.shiftStartedAt = t
 	self.shiftEndsAt = t + Config.SHIFT_DURATION
 	self.nextSpawnAt = t + 1.0   -- brief beat before the first ticket
@@ -161,42 +137,14 @@ function Kitchen:activeOrder()
 	return order
 end
 
--- The Prep counter always works its oldest waiting order. Choosing a ticket is
--- no longer a thing the player does -- choosing a STATION is.
+-- If nothing is selected (or what was selected just left), fall to the oldest
+-- ticket still waiting.
 function Kitchen:ensureSelection()
-	if self.activeOrderId then
-		local current = self:findOrder(self.activeOrderId)
-		if current and current.station == "Prep" then
-			return
-		end
+	if self.activeOrderId and self:findOrder(self.activeOrderId) then
+		return
 	end
-
-	self.activeOrderId = nil
+	self.activeOrderId = if self.orders[1] then self.orders[1].id else nil
 	self.build = {}
-
-	for _, order in self.orders do
-		if order.station == "Prep" then
-			self.activeOrderId = order.id
-			return
-		end
-	end
-end
-
--- Oldest fryer order that no basket has claimed yet.
-function Kitchen:nextFryerOrder()
-	local claimed = {}
-	for _, basket in self.baskets do
-		if basket.orderId then
-			claimed[basket.orderId] = true
-		end
-	end
-
-	for _, order in self.orders do
-		if order.station == "Fryer" and not claimed[order.id] then
-			return order
-		end
-	end
-	return nil
 end
 
 function Kitchen:spawnOrder()
@@ -221,16 +169,25 @@ end
 
 -- ------------------------------------------------------------ selection ----
 
--- Walking to another station. Deliberately does NOT abandon the half-built
--- plate at Prep: leaving something on the counter, dealing with the fryer, and
--- coming back to finish it is the whole point of having stations.
-function Kitchen:selectStation(index: number)
-	local stationId = StationDefs.byKeyIndex(index)
-	if not stationId or stationId == self.activeStation then
+-- Picking up a different ticket. Abandons whatever was on the plate: you
+-- cannot half-build two dishes at once.
+function Kitchen:selectSlot(slot: number)
+	local order = self.orders[slot]
+	if not order or order.id == self.activeOrderId then
 		return
 	end
-	self.activeStation = stationId
-	self:emit({ type = "stationChanged", stationId = stationId })
+	self.activeOrderId = order.id
+	self.build = {}
+	self:emit({ type = "selected", orderId = order.id })
+end
+
+function Kitchen:selectOrder(orderId: number)
+	for slot, order in self.orders do
+		if order.id == orderId then
+			self:selectSlot(slot)
+			return
+		end
+	end
 end
 
 -- ---------------------------------------------------------------- build ----
@@ -241,7 +198,7 @@ local function keyToIngredient(dishId: string, key: string): string?
 	if not dish then
 		return nil
 	end
-	for _, component in dish.components do
+	for _, component in (dish.components or {}) do
 		if component.key == key then
 			return component.id
 		end
@@ -250,7 +207,7 @@ local function keyToIngredient(dishId: string, key: string): string?
 end
 
 function Kitchen:addIngredient(key: string)
-	if self.state ~= "Service" or self.activeStation ~= "Prep" then
+	if self.state ~= "Service" then
 		return
 	end
 
@@ -260,7 +217,8 @@ function Kitchen:addIngredient(key: string)
 	end
 
 	local order = self:activeOrder()
-	if not order then
+	if not order or order.cookState then
+		-- Fried orders are not assembled; the letter keys do nothing on them.
 		return
 	end
 
@@ -299,7 +257,7 @@ function Kitchen:addIngredient(key: string)
 end
 
 function Kitchen:scrap()
-	if self.state ~= "Service" or self.activeStation ~= "Prep" or #self.build == 0 then
+	if self.state ~= "Service" or #self.build == 0 then
 		return
 	end
 	self.build = {}
@@ -319,12 +277,23 @@ local function buildMatches(build, required): boolean
 end
 
 function Kitchen:serve()
-	if self.state ~= "Service" or self.activeStation ~= "Prep" then
+	if self.state ~= "Service" then
 		return
 	end
 
 	local order = self:activeOrder()
-	if not order or #self.build == 0 then
+	if not order then
+		return
+	end
+
+	-- Fried orders have no plate to check. SPACE starts them cooking, then
+	-- collects them once they are ready.
+	if order.cookState then
+		self:handleFryOrder(order)
+		return
+	end
+
+	if #self.build == 0 then
 		return
 	end
 
@@ -335,7 +304,7 @@ end
 
 -- Scoring, combo, stats and the graded event, shared by every station: a dish
 -- pulled from the fryer pays out exactly like a plate handed over at Prep.
-function Kitchen:award(order, grade: string, basketIndex: number?)
+function Kitchen:award(order, grade: string)
 	local value, comboMult = ScoreService.payout(order, grade, self.combo)
 
 	self.score += value
@@ -354,7 +323,6 @@ function Kitchen:award(order, grade: string, basketIndex: number?)
 		orderId = order.id,
 		dishId = order.dishId,
 		station = order.station,
-		basket = basketIndex,
 		grade = grade,
 		value = value,
 		comboMult = comboMult,
@@ -366,96 +334,62 @@ end
 
 -- ---------------------------------------------------------------- fryer ----
 
--- One key per basket, and the key means whatever the basket needs next: drop
--- when empty, pull when cooking or ready, clear when burnt. Two keys run the
--- whole station no matter how busy it gets.
-function Kitchen:basketAction(index: number)
-	if self.state ~= "Service" or self.activeStation ~= "Fryer" then
-		return
-	end
-
-	local basket = self.baskets[index]
-	if not basket then
-		return
+-- Every fried order cooks on its own clock, rather than competing for a fixed
+-- shared pool of fryer baskets. Four customers can all have fries going at
+-- once, which is how Cook Serve Delicious does it and what a fixed set of
+-- baskets could not express.
+--
+-- Because starting a fry is therefore nearly free, the pressure lives in
+-- COLLECTING it: an order sits ready for a few seconds and then burns. Walking
+-- away is still a decision, it is just a decision about coming back.
+function Kitchen:startCook(order): boolean
+	local dish = DishDefs.get(order.dishId)
+	local fry = dish and dish.fry
+	if not fry or order.cookState ~= "raw" then
+		return false
 	end
 
 	local t = now()
+	order.cookState = "cooking"
+	order.readyAt = t + fry.cookTime
+	order.burnAt = order.readyAt + fry.burn
 
-	if basket.state == "empty" then
-		local order = self:nextFryerOrder()
-		if not order then
-			return
-		end
-
-		local dish = DishDefs.get(order.dishId)
-		local fry = dish and dish.fry
-		if not fry then
-			return
-		end
-
-		basket.state = "cooking"
-		basket.orderId = order.id
-		basket.readyAt = t + fry.cookTime
-		basket.burnAt = basket.readyAt + fry.burn
-
-		self:emit({
-			type = "basketDropped",
-			basket = index,
-			orderId = order.id,
-			dishId = order.dishId,
-			readyAt = basket.readyAt,
-			burnAt = basket.burnAt,
-		})
-
-	elseif basket.state == "cooking" then
-		-- Pulled early. Raw food is a wrong order, not a slow one.
-		self:finishBasket(index, "Fail")
-
-	elseif basket.state == "ready" then
-		self:finishBasket(index, nil)
-
-	elseif basket.state == "burnt" then
-		-- The order already failed when it burned; this just empties the basket
-		-- so it can be used again.
-		basket.state = "empty"
-		basket.orderId = nil
-		self:emit({ type = "basketCleared", basket = index })
-	end
+	self:emit({
+		type = "cookStarted",
+		orderId = order.id,
+		dishId = order.dishId,
+		readyAt = order.readyAt,
+		burnAt = order.burnAt,
+	})
+	return true
 end
 
--- Grades and pays out whatever is in the basket, then empties it. A nil
--- `forcedGrade` means work it out from how late the pull was.
-function Kitchen:finishBasket(index: number, forcedGrade: string?)
-	local basket = self.baskets[index]
-	if not basket or not basket.orderId then
-		return
-	end
-
-	local order = self:findOrder(basket.orderId)
+-- SPACE on a fried order means whatever it needs next: start it if it is raw,
+-- collect it if it is ready. One key, no mode to remember.
+function Kitchen:handleFryOrder(order): boolean
 	local t = now()
 
-	if order then
-		local grade = forcedGrade
+	if order.cookState == "raw" then
+		self:startCook(order)
 
-		if not grade then
-			local dish = DishDefs.get(order.dishId)
-			local fry = dish and dish.fry
-			local overshoot = t - basket.readyAt
+	elseif order.cookState == "cooking" then
+		-- Collected raw. That is a wrong order, not a slow one.
+		self:award(order, "Fail")
 
-			-- Two clocks apply to a fried order: how precisely it came out of
-			-- the oil, and how long the customer has been waiting. Take the
-			-- worse of the two, so you cannot rescue a forgotten ticket with a
-			-- flawless pull, or vice versa.
-			local fryGrade = ScoreService.fryGrade(overshoot, fry)
-			local patienceGrade = ScoreService.grade(order, t, true)
-			grade = ScoreService.worst(fryGrade, patienceGrade)
-		end
+	elseif order.cookState == "ready" then
+		local dish = DishDefs.get(order.dishId)
+		-- Two clocks apply: how precisely it was collected, and how long the
+		-- customer has been waiting. The worse one wins, so a flawless pull
+		-- cannot rescue a ticket left sitting.
+		local fryGrade = ScoreService.fryGrade(t - order.readyAt, dish and dish.fry)
+		local patienceGrade = ScoreService.grade(order, t, true)
+		self:award(order, ScoreService.worst(fryGrade, patienceGrade))
 
-		self:award(order, grade, index)
+	elseif order.cookState == "burnt" then
+		self:award(order, "Fail")
 	end
 
-	basket.state = "empty"
-	basket.orderId = nil
+	return true
 end
 
 -- ----------------------------------------------------------------- tick ----
@@ -467,23 +401,18 @@ function Kitchen:tick()
 
 	local t = now()
 
-	-- The fryer runs whether or not anyone is watching it. This loop is the
-	-- reason the station exists.
-	for index, basket in self.baskets do
-		if basket.state == "cooking" and t >= basket.readyAt then
-			basket.state = "ready"
-			self:emit({ type = "basketReady", basket = index, orderId = basket.orderId })
+	-- Fried orders cook whether or not anyone is looking at them. This loop is
+	-- the reason walking away costs something.
+	for _, order in self.orders do
+		if order.cookState == "cooking" and t >= order.readyAt then
+			order.cookState = "ready"
+			self:emit({ type = "cookReady", orderId = order.id, dishId = order.dishId })
 
-		elseif basket.state == "ready" and t >= basket.burnAt then
-			-- Left too long. The order fails on its own -- ignoring the fryer
-			-- has to cost something, or there is no tension in walking away.
-			basket.state = "burnt"
-			local order = if basket.orderId then self:findOrder(basket.orderId) else nil
-			self:emit({ type = "basketBurnt", basket = index, orderId = basket.orderId })
-			if order then
-				self:award(order, "Fail", index)
-			end
-			basket.orderId = nil
+		elseif order.cookState == "ready" and t >= order.burnAt then
+			-- Left too long. Still collectable, but it is a Fail now: ignoring
+			-- it has to cost something or there is no tension in leaving.
+			order.cookState = "burnt"
+			self:emit({ type = "cookBurnt", orderId = order.id, dishId = order.dishId })
 		end
 	end
 
@@ -532,23 +461,14 @@ function Kitchen:snapshot()
 			id = order.id,
 			dishId = order.dishId,
 			station = order.station,
+			cookState = order.cookState,
+			readyAt = order.readyAt,
+			burnAt = order.burnAt,
 			required = order.required,
 			keys = order.keys,
 			createdAt = order.createdAt,
 			expiresAt = order.expiresAt,
 		})
-	end
-
-	-- Baskets are sent every tick: their countdowns are the one thing the
-	-- player must be able to read from another station.
-	local baskets = {}
-	for index, basket in self.baskets do
-		baskets[index] = {
-			state = basket.state,
-			orderId = basket.orderId,
-			readyAt = basket.readyAt,
-			burnAt = basket.burnAt,
-		}
 	end
 
 	return {
@@ -560,8 +480,6 @@ function Kitchen:snapshot()
 		combo = self.combo,
 		comboMult = ScoreService.comboMultiplier(self.combo),
 		bestCombo = self.bestCombo,
-		activeStation = self.activeStation,
-		baskets = baskets,
 		activeOrderId = self.activeOrderId,
 		build = self.build,
 		fumbleUntil = self.fumbleUntil,

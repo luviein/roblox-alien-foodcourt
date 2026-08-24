@@ -37,11 +37,11 @@ local REACT_DURATION = 0.75
 -- How each outcome reads on the customer. Emoji need no asset ids and are
 -- legible at any distance, which face decals are not.
 local REACTIONS = {
-	Perfect = { emoji = "🤩", mood = "happy" },
-	Good    = { emoji = "😄", mood = "happy" },
-	Sloppy  = { emoji = "🙂", mood = "happy" },
-	Fail    = { emoji = "😠", mood = "angry" },
-	Expired = { emoji = "😡", mood = "angry" },
+	Perfect = { emoji = "ð¤©", mood = "happy" },
+	Good    = { emoji = "ð", mood = "happy" },
+	Sloppy  = { emoji = "ð", mood = "happy" },
+	Fail    = { emoji = "ð ", mood = "angry" },
+	Expired = { emoji = "ð¡", mood = "angry" },
 }
 
 local COLOR = {
@@ -60,6 +60,7 @@ local scene: any = nil
 local active: { [number]: any } = {}
 local nextSeed = 1
 local warnedNoJoints = false
+local selectOrder: any = nil
 
 -- Draws the first customer's body composition on screen. Turn off once the
 -- rig pipeline is settled.
@@ -89,11 +90,15 @@ local function buildBillboard(adornee: BasePart, heightOffset: number)
 		MaxDistance = 300,
 	}, adornee)
 
-	local frame = make("Frame", {
+	-- A button, not a Frame: clicking a ticket picks up that order, which is
+	-- how you reach one that is not simply next in line.
+	local frame = make("TextButton", {
 		Name = "Panel",
 		BackgroundColor3 = COLOR.panel,
 		BackgroundTransparency = 0.08,
 		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
 		Size = UDim2.fromScale(1, 1),
 	}, gui)
 	make("UICorner", { CornerRadius = UDim.new(0, 8) }, frame)
@@ -499,6 +504,12 @@ local function spawnCustomer(order)
 
 
 	local bill = buildBillboard(body.adornee, body.billboardOffset)
+
+	bill.panel.Activated:Connect(function()
+		if selectOrder then
+			selectOrder(order.id)
+		end
+	end)
 	local reaction = buildReactionBubble(body.adornee, body.billboardOffset - 0.5)
 	local spawnPosition = scene.spawnCFrame.Position
 
@@ -567,8 +578,9 @@ end
 
 -- --------------------------------------------------------------- public ----
 
-function Customers.init(sceneRefs)
+function Customers.init(sceneRefs, onSelectOrder)
 	scene = sceneRefs
+	selectOrder = onSelectOrder
 	active = {}
 end
 
@@ -618,16 +630,24 @@ local function renderTicket(entry, order, slotIndex: number, snapshot)
 	bill.stroke.Color = if isActive then COLOR.accent else COLOR.stroke
 	bill.stroke.Thickness = if isActive then 3 else 2
 
-	-- Fryer orders have nothing to assemble, so their ticket says where to go
-	-- instead of listing ingredients it does not have.
-	if order.station ~= "Prep" then
+	-- Fried orders have nothing to assemble. Their ticket carries the cook
+	-- state instead, and the countdown is filled in per frame by update() --
+	-- writing it here as well made the two fight and the text flicker.
+	if order.cookState then
 		local first = bill.rows[1]
 		first.frame.Visible = true
-		first.key.Text = "2"
-		first.key.BackgroundColor3 = COLOR.warn
+		first.key.Text = "▶"
+		first.name.TextColor3 = COLOR.text
+
+		if order.cookState == "raw" then
+			first.key.BackgroundColor3 = COLOR.accent
+			first.name.Text = "SPACE to fry"
+		elseif order.cookState == "burnt" then
+			first.key.BackgroundColor3 = COLOR.bad
+			first.name.Text = "BURNT"
+		end
+
 		first.key.TextColor3 = Color3.fromRGB(16, 17, 24)
-		first.name.Text = "at the Fryer"
-		first.name.TextColor3 = COLOR.dim
 
 		for index = 2, MAX_ROWS do
 			bill.rows[index].frame.Visible = false
@@ -713,6 +733,9 @@ function Customers.sync(snapshot)
 
 		entry.createdAt = order.createdAt
 		entry.expiresAt = order.expiresAt
+		entry.cookState = order.cookState
+		entry.readyAt = order.readyAt
+		entry.burnAt = order.burnAt
 
 		renderTicket(entry, order, orderIndex, snapshot)
 	end
@@ -801,6 +824,21 @@ function Customers.update(dt: number, _snapshot)
 				-- read how close someone is to walking out from their face
 				-- alone, before checking the patience bar.
 				Face.tween(body.face, 0.35 - agitation * 1.1, dt)
+			end
+
+			-- Cook countdown, written once per frame so it counts smoothly.
+			-- renderTicket deliberately leaves these two states alone: both
+			-- writing the same label made it flicker between them.
+			if entry.cookState == "cooking" or entry.cookState == "ready" then
+				local row = entry.bill.rows[1]
+				if entry.cookState == "cooking" then
+					row.key.BackgroundColor3 = COLOR.warn
+					row.name.Text = string.format("frying  %.1fs", math.max(0, entry.readyAt - clock))
+				else
+					-- Counts down to burning, so the number is the danger.
+					row.key.BackgroundColor3 = COLOR.good
+					row.name.Text = string.format("READY  %.1fs", math.max(0, entry.burnAt - clock))
+				end
 			end
 
 			entry.bill.fill.Size = UDim2.fromScale(calm, 1)
