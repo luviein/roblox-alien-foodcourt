@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "serve-sfx-10"
+Config.BUILD = "settings-grade-11"
 
 -- ---------------------------------------------------------------- shift ----
 Config.SHIFT_DURATION = 180        -- seconds of service per round
@@ -30,6 +30,14 @@ Config.SPAWN_INTERVAL = {
 }
 
 -- ---------------------------------------------------------------- score ----
+-- Grade boundaries as a fraction of the customer's remaining patience.
+-- These are also the colour stops on the patience bar, deliberately: the bar
+-- is the grade meter, so serving while it is green is a Perfect.
+Config.GRADE_PATIENCE = {
+	perfect = 0.55,
+	good = 0.30,
+}
+
 Config.GRADE_MULT = {
 	Perfect = 1.5,
 	Good = 1.0,

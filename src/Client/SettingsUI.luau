@@ -1,9 +1,12 @@
 --!strict
 -- The settings panel and the gear that opens it.
 --
--- Sliders are -/+ steppers rather than drag handles: no pointer-capture edge
--- cases, works identically on touch, and 10% steps are finer than anyone
--- actually needs for a volume control.
+-- Volume rows take both: click or drag anywhere on the bar to scrub, or use
+-- the -/+ buttons for exact steps. The bar has a taller invisible hit area
+-- than it looks, because an 8px drag target is awful with a mouse and
+-- unusable on touch.
+
+local UserInputService = game:GetService("UserInputService")
 
 local Settings = require(script.Parent.Settings)
 
@@ -69,13 +72,27 @@ local function sliderRow(parent: Instance, order: number, label: string, key: st
 		TextXAlignment = Enum.TextXAlignment.Right,
 	}, row)
 
-	local track = make("Frame", {
+	-- A TextButton rather than a Frame so it takes input directly, and taller
+	-- than it looks: the visible bar is drawn inside a generous hit area,
+	-- because an 8px-tall drag target is miserable with a mouse and unusable
+	-- on touch.
+	local hit = make("TextButton", {
 		Name = "Track",
+		BackgroundTransparency = 1,
+		AutoButtonColor = false,
+		Text = "",
+		Position = UDim2.fromScale(0, 0.58),
+		Size = UDim2.fromScale(0.62, 0.42),
+	}, row)
+
+	local track = make("Frame", {
+		Name = "Bar",
 		BackgroundColor3 = COLOR.bg,
 		BorderSizePixel = 0,
-		Position = UDim2.fromScale(0, 0.68),
-		Size = UDim2.fromScale(0.62, 0.16),
-	}, row)
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromScale(0, 0.5),
+		Size = UDim2.fromScale(1, 0.42),
+	}, hit)
 	corner(track, 4)
 
 	local fill = make("Frame", {
@@ -85,6 +102,48 @@ local function sliderRow(parent: Instance, order: number, label: string, key: st
 		Size = UDim2.fromScale(0.7, 1),
 	}, track)
 	corner(fill, 4)
+
+	-- Click anywhere on the bar to jump there; hold and drag to scrub.
+	local dragging = false
+
+	local function setFromX(x: number)
+		local left = track.AbsolutePosition.X
+		local width = math.max(track.AbsoluteSize.X, 1)
+		local fraction = (x - left) / width
+		-- 5% granularity: fine enough to feel continuous, coarse enough that
+		-- the readout lands on round numbers.
+		Settings.set(key, math.clamp(math.round(fraction * 20) / 20, 0, 1))
+	end
+
+	hit.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			dragging = true
+			setFromX(input.Position.X)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not dragging then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			setFromX(input.Position.X)
+		end
+	end)
+
+	-- Released anywhere, not just over the bar -- otherwise dragging off the
+	-- end of the track leaves it stuck to the pointer.
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			dragging = false
+		end
+	end)
 
 	local function button(text: string, x: number, delta: number)
 		local btn = make("TextButton", {
@@ -202,13 +261,18 @@ function SettingsUI.build(playerGui: Instance)
 		Visible = false,
 	}, screen)
 
-	local panel = make("Frame", {
+	-- A TextButton, not a Frame: the backdrop behind it is clickable-to-close,
+	-- and a plain Frame does not absorb clicks, so every press inside the
+	-- panel fell through to the backdrop and shut it.
+	local panel = make("TextButton", {
 		Name = "Panel",
 		BackgroundColor3 = COLOR.panel,
 		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(420, 380),
+		Size = UDim2.fromOffset(420, 400),
 	}, shade)
 	corner(panel, 12)
 	make("UIStroke", { Color = COLOR.stroke, Thickness = 2 }, panel)
@@ -285,12 +349,11 @@ function SettingsUI.build(playerGui: Instance)
 	close.Activated:Connect(function()
 		setOpen(false)
 	end)
-	-- Clicking the dimmed backdrop closes too, but clicks on the panel itself
-	-- must not bubble up to it.
+	-- Clicking the dimmed backdrop closes. Clicks on the panel are absorbed by
+	-- the panel itself being a button, so they never reach here.
 	shade.Activated:Connect(function()
 		setOpen(false)
 	end)
-	panel.InputBegan:Connect(function() end)
 
 	return {
 		screen = screen,

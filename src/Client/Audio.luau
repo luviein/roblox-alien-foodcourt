@@ -4,6 +4,7 @@
 -- Two SoundGroups carry the volume sliders, so changing a setting is one
 -- property write rather than a walk over every live sound.
 
+local ContentProvider = game:GetService("ContentProvider")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
@@ -19,6 +20,7 @@ local sfxGroup: SoundGroup
 local musicGroup: SoundGroup
 local musicPlayer: Sound
 local trackIndex = 0
+local lastVolumeBlip = 0
 
 -- --------------------------------------------------------------- helpers ---
 
@@ -28,19 +30,45 @@ end
 
 -- ------------------------------------------------------------------ music --
 
+-- Walks the playlist until something actually loads.
+--
+-- Roblox gates long-form audio: clips over roughly six seconds can only be
+-- played by the account that uploaded them, unless Roblox published the asset
+-- itself. Short effects have no such restriction. So a soundtrack silently
+-- refusing to play while every SFX works is the expected symptom of borrowed
+-- music, not a bug -- and it deserves a warning that says so rather than
+-- silence you have to guess at.
 local function playNextTrack()
 	local tracks = SoundDefs.Music
 	if #tracks == 0 or not musicPlayer then
 		return
 	end
 
-	trackIndex += 1
-	if trackIndex > #tracks then
-		trackIndex = 1
+	for _ = 1, #tracks do
+		trackIndex += 1
+		if trackIndex > #tracks then
+			trackIndex = 1
+		end
+
+		local id = tracks[trackIndex]
+		musicPlayer.SoundId = assetUrl(id)
+
+		pcall(function()
+			ContentProvider:PreloadAsync({ musicPlayer })
+		end)
+
+		-- A track that failed to load reports no length.
+		if musicPlayer.TimeLength > 0 then
+			musicPlayer:Play()
+			return
+		end
+
+		warn(("[AlienFoodCourt] music track %d would not load. Audio longer than "
+			.. "~6s can only be played by the account that uploaded it, unless "
+			.. "Roblox published it."):format(id))
 	end
 
-	musicPlayer.SoundId = assetUrl(tracks[trackIndex])
-	musicPlayer:Play()
+	warn("[AlienFoodCourt] no usable music tracks -- running silent")
 end
 
 function Audio.startMusic()
@@ -51,7 +79,9 @@ function Audio.startMusic()
 		return
 	end
 	trackIndex = math.random(0, #SoundDefs.Music - 1)  -- vary which track opens
-	playNextTrack()
+
+	-- PreloadAsync yields, so keep it off whatever called us.
+	task.spawn(playNextTrack)
 end
 
 function Audio.stopMusic()
@@ -117,13 +147,19 @@ function Audio.init()
 	musicPlayer.Volume = 1
 	musicPlayer.SoundGroup = musicGroup
 	musicPlayer.Parent = SoundService
-	musicPlayer.Ended:Connect(playNextTrack)
+	musicPlayer.Ended:Connect(function()
+		task.spawn(playNextTrack)
+	end)
 
 	Settings.changed.Event:Connect(function(key: string, value: any)
 		if key == "sfxVolume" then
 			sfxGroup.Volume = value
-			-- Give immediate feedback while dragging the slider.
-			Audio.play("click")
+			-- Audible feedback while adjusting, throttled: dragging the slider
+			-- fires this many times a second otherwise.
+			if os.clock() - lastVolumeBlip > 0.12 then
+				lastVolumeBlip = os.clock()
+				Audio.play("click")
+			end
 		elseif key == "musicVolume" then
 			musicGroup.Volume = value
 		end

@@ -534,7 +534,10 @@ local function setModelTransparency(entry, alpha: number)
 			descendant.LocalTransparencyModifier = alpha
 		end
 	end
-	entry.bill.gui.Enabled = alpha < 0.9
+	-- The ticket stays hidden once they are leaving. Re-enabling it here put
+	-- it back on screen behind the reaction emoji, and two overlapping
+	-- AlwaysOnTop billboards flicker against each other.
+	entry.bill.gui.Enabled = false
 	entry.reaction.label.TextTransparency = alpha
 end
 
@@ -784,9 +787,11 @@ function Customers.update(dt: number, _snapshot)
 			end
 
 			entry.bill.fill.Size = UDim2.fromScale(calm, 1)
-			entry.bill.fill.BackgroundColor3 = if calm > 0.5
+			-- Same stops as Config.GRADE_PATIENCE: green means a Perfect is
+			-- still on the table, amber a Good, red a Sloppy.
+			entry.bill.fill.BackgroundColor3 = if calm >= 0.55
 				then COLOR.good
-				elseif calm > 0.25 then COLOR.warn
+				elseif calm >= 0.30 then COLOR.warn
 				else COLOR.bad
 		end
 

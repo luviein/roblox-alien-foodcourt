@@ -230,7 +230,6 @@ local function handleEvent(event)
 		Customers.clear()
 		FoodStack.clear()
 		comboWasMaxed = false
-		Audio.stopMusic()
 		Audio.play("roundComplete")
 	end
 end
@@ -310,6 +309,9 @@ local function boot()
 
 	ready = true
 	Loading.finish(loading)
+
+	-- Music from the menu onward, not just during a shift.
+	Audio.startMusic()
 
 	print("[AlienFoodCourt] client ready")
 end
