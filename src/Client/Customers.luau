@@ -11,6 +11,7 @@
 -- Each customer carries their own ticket on a BillboardGui above their head,
 -- so the order literally walks in with the person who wants it.
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -79,19 +80,40 @@ local function make(className: string, props: { [string]: any }, parent: Instanc
 	return instance
 end
 
+-- Tickets live here rather than under the customer, so their buttons receive
+-- input. One ScreenGui holds them all; Adornee does the positioning.
+local ticketScreen: ScreenGui? = nil
+
+local function ticketLayer(): Instance
+	if ticketScreen and ticketScreen.Parent then
+		return ticketScreen
+	end
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	ticketScreen = make("ScreenGui", {
+		Name = "AFC_Tickets",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		DisplayOrder = 5,   -- under the prep panel and the settings modal
+	}, playerGui)
+	return ticketScreen :: ScreenGui
+end
+
 local function buildBillboard(adornee: BasePart, heightOffset: number)
+	-- Parented to PlayerGui with an Adornee, NOT to the part itself. A
+	-- BillboardGui living in Workspace renders fine but does not reliably
+	-- deliver input to the buttons inside it -- the ticket looked clickable,
+	-- sat on top of everything, and swallowed every click. Adornee keeps it
+	-- pinned above the customer's head either way.
 	local gui = make("BillboardGui", {
 		Name = "Ticket",
 		Adornee = adornee,
-		-- Without this, GuiObjects inside a BillboardGui receive no input at
-		-- all: the ticket looked like a button and swallowed every click.
 		Active = true,
 		AlwaysOnTop = true,
 		LightInfluence = 0,
 		Size = UDim2.fromScale(4.4, 3.6),
 		StudsOffset = Vector3.new(0, heightOffset, 0),
 		MaxDistance = 300,
-	}, adornee)
+	}, ticketLayer())
 
 	-- A button, not a Frame: clicking a ticket picks up that order, which is
 	-- how you reach one that is not simply next in line.
@@ -538,6 +560,9 @@ local function spawnCustomer(order)
 end
 
 local function destroyCustomer(entry)
+	-- The ticket lives in PlayerGui, not under the model, so it has to be
+	-- cleaned up explicitly.
+	entry.bill.gui:Destroy()
 	entry.body.model:Destroy()
 	active[entry.orderId] = nil
 end
@@ -589,6 +614,7 @@ end
 
 function Customers.clear()
 	for _, entry in active do
+		entry.bill.gui:Destroy()
 		entry.body.model:Destroy()
 	end
 	active = {}

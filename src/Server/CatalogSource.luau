@@ -114,39 +114,72 @@ end
 
 -- ----------------------------------------------------------------- public --
 
--- Resolves every slot into a validated list of asset ids. Yields (web calls),
--- so call it from inside a task.spawn.
+-- Resolves one slot. Yields on web calls.
+local function resolveSlot(slot)
+	local manual = (AvatarPool :: any)[slot.key] or {}
+
+	-- Ids that came back FROM the catalog do not need checking against the
+	-- catalog. Only hand-pasted ids can be wrong, and only those are worth a
+	-- round trip each -- validating auto-fetched ones was ~90 sequential web
+	-- calls of pure ceremony at every server start.
+	if #manual == 0 then
+		local fetched = fetchFromCatalog(slot)
+		if #fetched > 0 then
+			print(("[AvatarPool] %s: %d ids (from catalog)"):format(slot.key, #fetched))
+		end
+		return fetched
+	end
+
+	-- Hand-picked ids, verified in parallel rather than one after another.
+	local results = table.create(#manual)
+	local pending = #manual
+
+	for index, id in manual do
+		task.spawn(function()
+			results[index] = if validate(id, slot.assetTypeId, slot.key) then id else 0
+			pending -= 1
+		end)
+	end
+
+	while pending > 0 do
+		task.wait()
+	end
+
+	local valid = {}
+	for index = 1, #manual do
+		if results[index] and results[index] ~= 0 then
+			table.insert(valid, results[index])
+		end
+	end
+
+	if #valid > 0 then
+		print(("[AvatarPool] %s: %d/%d ids usable (from AvatarPool)")
+			:format(slot.key, #valid, #manual))
+	else
+		warn(("[AvatarPool] %s: none of the %d ids were usable"):format(slot.key, #manual))
+	end
+
+	return valid
+end
+
+-- Resolves every slot into a list of asset ids. Yields (web calls), so call it
+-- from inside a task.spawn.
+--
+-- Slots resolve concurrently: they are independent, and running eight catalog
+-- searches back to back was most of the wait before the game would open.
 function CatalogSource.resolve()
 	local resolved = {}
+	local pending = #SLOTS
 
 	for _, slot in SLOTS do
-		local manual = (AvatarPool :: any)[slot.key] or {}
-		local candidates: { number }
-		local source: string
+		task.spawn(function()
+			resolved[slot.key] = resolveSlot(slot)
+			pending -= 1
+		end)
+	end
 
-		if #manual > 0 then
-			candidates = manual
-			source = "AvatarPool"
-		else
-			candidates = fetchFromCatalog(slot)
-			source = "catalog"
-		end
-
-		local valid = {}
-		for _, id in candidates do
-			if validate(id, slot.assetTypeId, slot.key) then
-				table.insert(valid, id)
-			end
-		end
-
-		resolved[slot.key] = valid
-
-		if #valid > 0 then
-			print(("[AvatarPool] %s: %d/%d ids usable (from %s)")
-				:format(slot.key, #valid, #candidates, source))
-		elseif #candidates > 0 then
-			warn(("[AvatarPool] %s: none of the %d ids were usable"):format(slot.key, #candidates))
-		end
+	while pending > 0 do
+		task.wait()
 	end
 
 	return resolved

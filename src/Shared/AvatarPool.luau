@@ -19,8 +19,13 @@
 local AvatarPool = {}
 
 -- How many distinct rigs to pre-build at server start. Four are on screen at
--- once, so a dozen is plenty of variety without a long startup.
-AvatarPool.POOL_SIZE = 14
+-- once, so ten is plenty of variety.
+AvatarPool.POOL_SIZE = 10
+
+-- Play opens once this many exist. The rest keep building in the background
+-- and land during the first minute of the shift, which nobody notices --
+-- waiting for the full pool was most of the loading screen.
+AvatarPool.MIN_READY = 4
 
 -- Classic clothing (Shirt / Pants asset IDs -- NOT "Classic T-Shirt").
 AvatarPool.Shirts = {}

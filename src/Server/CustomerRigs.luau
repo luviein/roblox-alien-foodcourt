@@ -141,28 +141,47 @@ function CustomerRigs.build()
 
 		local rng = Random.new()
 		local built = 0
+		local finished = 0
 
+		-- All rigs at once. Each CreateHumanoidModelFromDescription is a web
+		-- round trip, so building them one after another meant the wait was the
+		-- sum of every call rather than the slowest one.
 		for index = 1, AvatarPool.POOL_SIZE do
 			local description = buildDescription(rng, pools)
 
-			local ok, result = pcall(function()
-				return Players:CreateHumanoidModelFromDescription(
-					description,
-					Enum.HumanoidRigType.R15
-				)
+			task.spawn(function()
+				local ok, result = pcall(function()
+					return Players:CreateHumanoidModelFromDescription(
+						description,
+						Enum.HumanoidRigType.R15
+					)
+				end)
+
+				if ok and result then
+					local model = result :: Model
+					model.Name = "Customer" .. index
+					prepareRig(model)
+					model.Parent = folder
+					built += 1
+				else
+					warn(("[AlienFoodCourt] rig %d failed to build: %s"):format(index, tostring(result)))
+				end
+
+				finished += 1
+				folder:SetAttribute("Built", built)
+
+				-- Open the doors as soon as there is enough variety to start.
+				-- Four customers are on screen at once; the rest of the pool
+				-- lands during the first minute of the shift and nobody sees
+				-- the difference.
+				if built >= AvatarPool.MIN_READY then
+					folder:SetAttribute("Ready", true)
+				end
 			end)
+		end
 
-			if ok and result then
-				local model = result :: Model
-				model.Name = "Customer" .. index
-				prepareRig(model)
-				model.Parent = folder
-				built += 1
-			else
-				warn(("[AlienFoodCourt] rig %d failed to build: %s"):format(index, tostring(result)))
-			end
-
-			folder:SetAttribute("Built", built)
+		while finished < AvatarPool.POOL_SIZE do
+			task.wait()
 		end
 
 		-- Always flip Ready, even with zero rigs -- the client must not sit on

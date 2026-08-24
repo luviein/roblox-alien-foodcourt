@@ -293,8 +293,8 @@ local function boot()
 			local total = math.max(folder:GetAttribute("Total") or 1, 1)
 			Loading.setStatus(
 				loading,
-				("processing arrivals   %d / %d"):format(built, total),
-				0.1 + 0.55 * (built / total)
+				("processing arrivals   %d"):format(built),
+				0.1 + 0.55 * math.min(built / math.max(total, 1), 1)
 			)
 			task.wait(0.1)
 		end
