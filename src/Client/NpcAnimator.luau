@@ -53,23 +53,35 @@ export type Rig = {
 -- The R15 skeleton: joint name, the part it hangs from, and the part it moves.
 -- Both parts carry an Attachment called "<jointName>RigAttachment", and the
 -- pair of those defines the joint completely.
+-- The fourth field is where the joint pivot sits on the CHILD part: limbs
+-- swing from their top end, the head and upper torso from their bottom.
 local R15_JOINTS = {
-	{ "Root",          "HumanoidRootPart", "LowerTorso" },
-	{ "Waist",         "LowerTorso",       "UpperTorso" },
-	{ "Neck",          "UpperTorso",       "Head" },
-	{ "LeftShoulder",  "UpperTorso",       "LeftUpperArm" },
-	{ "LeftElbow",     "LeftUpperArm",     "LeftLowerArm" },
-	{ "LeftWrist",     "LeftLowerArm",     "LeftHand" },
-	{ "RightShoulder", "UpperTorso",       "RightUpperArm" },
-	{ "RightElbow",    "RightUpperArm",    "RightLowerArm" },
-	{ "RightWrist",    "RightLowerArm",    "RightHand" },
-	{ "LeftHip",       "LowerTorso",       "LeftUpperLeg" },
-	{ "LeftKnee",      "LeftUpperLeg",     "LeftLowerLeg" },
-	{ "LeftAnkle",     "LeftLowerLeg",     "LeftFoot" },
-	{ "RightHip",      "LowerTorso",       "RightUpperLeg" },
-	{ "RightKnee",     "RightUpperLeg",    "RightLowerLeg" },
-	{ "RightAnkle",    "RightLowerLeg",    "RightFoot" },
+	{ "Root",          "HumanoidRootPart", "LowerTorso",    "center" },
+	{ "Waist",         "LowerTorso",       "UpperTorso",    "bottom" },
+	{ "Neck",          "UpperTorso",       "Head",          "bottom" },
+	{ "LeftShoulder",  "UpperTorso",       "LeftUpperArm",  "top" },
+	{ "LeftElbow",     "LeftUpperArm",     "LeftLowerArm",  "top" },
+	{ "LeftWrist",     "LeftLowerArm",     "LeftHand",      "top" },
+	{ "RightShoulder", "UpperTorso",       "RightUpperArm", "top" },
+	{ "RightElbow",    "RightUpperArm",    "RightLowerArm", "top" },
+	{ "RightWrist",    "RightLowerArm",    "RightHand",     "top" },
+	{ "LeftHip",       "LowerTorso",       "LeftUpperLeg",  "top" },
+	{ "LeftKnee",      "LeftUpperLeg",     "LeftLowerLeg",  "top" },
+	{ "LeftAnkle",     "LeftLowerLeg",     "LeftFoot",      "top" },
+	{ "RightHip",      "LowerTorso",       "RightUpperLeg", "top" },
+	{ "RightKnee",     "RightUpperLeg",    "RightLowerLeg", "top" },
+	{ "RightAnkle",    "RightLowerLeg",    "RightFoot",     "top" },
 }
+
+-- Where the joint hinges, in world space, derived from the child part itself.
+local function pivotOf(childPart: BasePart, mode: string): CFrame
+	if mode == "top" then
+		return childPart.CFrame * CFrame.new(0, childPart.Size.Y / 2, 0)
+	elseif mode == "bottom" then
+		return childPart.CFrame * CFrame.new(0, -childPart.Size.Y / 2, 0)
+	end
+	return childPart.CFrame
+end
 
 -- Assembles the Motor6Ds a rig should already have.
 --
@@ -86,7 +98,7 @@ function NpcAnimator.buildJoints(model: Model): number
 	local created = 0
 
 	for _, spec in R15_JOINTS do
-		local jointName, parentName, childName = spec[1], spec[2], spec[3]
+		local jointName, parentName, childName, pivotMode = spec[1], spec[2], spec[3], spec[4]
 
 		local parentPart = model:FindFirstChild(parentName)
 		local childPart = model:FindFirstChild(childName)
@@ -95,6 +107,10 @@ function NpcAnimator.buildJoints(model: Model): number
 			and parentPart:IsA("BasePart") and childPart:IsA("BasePart")
 			and not childPart:FindFirstChild(jointName)
 		then
+			local c0, c1
+
+			-- Preferred: the rig attachments, if this rig has them under the
+			-- names it is supposed to.
 			local attachmentName = jointName .. "RigAttachment"
 			local parentAttachment = parentPart:FindFirstChild(attachmentName)
 			local childAttachment = childPart:FindFirstChild(attachmentName)
@@ -102,17 +118,32 @@ function NpcAnimator.buildJoints(model: Model): number
 			if parentAttachment and childAttachment
 				and parentAttachment:IsA("Attachment") and childAttachment:IsA("Attachment")
 			then
-				local motor = Instance.new("Motor6D")
-				motor.Name = jointName
-				motor.Part0 = parentPart
-				motor.Part1 = childPart
-				-- The attachment pair IS the joint: C0 where it sits on the
-				-- parent, C1 where it sits on the child.
-				motor.C0 = parentAttachment.CFrame
-				motor.C1 = childAttachment.CFrame
-				motor.Parent = childPart
-				created += 1
+				c0 = parentAttachment.CFrame
+				c1 = childAttachment.CFrame
+			else
+				-- Fallback that needs nothing but the parts themselves. They
+				-- are already sitting in the right places relative to each
+				-- other -- that is why the avatar renders correctly despite
+				-- having no skeleton -- so the joint can be read straight off
+				-- their geometry.
+				--
+				-- Anchoring both C0 and C1 to the same world pivot means
+				-- Part1.CFrame comes out exactly where it already is, and
+				-- rotating C0 swings the limb about that pivot rather than
+				-- about the parent's centre.
+				local pivot = pivotOf(childPart, pivotMode)
+				c0 = parentPart.CFrame:Inverse() * pivot
+				c1 = childPart.CFrame:Inverse() * pivot
 			end
+
+			local motor = Instance.new("Motor6D")
+			motor.Name = jointName
+			motor.Part0 = parentPart
+			motor.Part1 = childPart
+			motor.C0 = c0
+			motor.C1 = c1
+			motor.Parent = childPart
+			created += 1
 		end
 	end
 

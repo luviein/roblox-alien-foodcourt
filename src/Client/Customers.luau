@@ -299,6 +299,19 @@ local function buildRigCustomer(parent: Instance)
 	-- them ourselves; skips anything already jointed.
 	local jointsMade = NpcAnimator.buildJoints(model)
 
+	-- A Motor6D cannot move an anchored part. Set this explicitly after the
+	-- joints exist rather than trusting how the rig arrived: an anchored limb
+	-- would hold the whole body rigid no matter how correct the animation is.
+	local anchoredParts = 0
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = descendant == root
+			if descendant.Anchored then
+				anchoredParts += 1
+			end
+		end
+	end
+
 	-- What is this model actually made of? Every theory so far has been about
 	-- animation when the real answer was about identity.
 	local census = { Motor6D = 0, Weld = 0, WeldConstraint = 0, Attachment = 0, BasePart = 0 }
@@ -318,11 +331,12 @@ local function buildRigCustomer(parent: Instance)
 		end
 	end
 
-	local diagnostic = ("rigType=%s buildRig=%s joints_made=%d | parts=%d motor6d=%d weld=%d weldcon=%d attach=%d\nchildren: %s")
+	local diagnostic = ("rigType=%s buildRig=%s joints_made=%d anchored=%d | parts=%d motor6d=%d weld=%d weldcon=%d attach=%d\nchildren: %s")
 		:format(
 			humanoid.RigType.Name,
 			if buildOk then "ok" else ("FAILED: " .. tostring(buildErr)),
 			jointsMade,
+			anchoredParts,
 			census.BasePart, census.Motor6D, census.Weld, census.WeldConstraint, census.Attachment,
 			table.concat(childNames, ", ")
 		)
