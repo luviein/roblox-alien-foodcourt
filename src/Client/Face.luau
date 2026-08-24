@@ -50,12 +50,15 @@ function Face.attach(head: BasePart)
 	local gui = make("BillboardGui", {
 		Name = "DrawnFace",
 		Adornee = head,
-		AlwaysOnTop = false,
+		-- Drawn over the head rather than depth-tested against it. Depth
+		-- testing means the plate has to be nudged in front of the head mesh
+		-- by exactly the right amount or it vanishes inside it, and how far
+		-- "in front" is depends on the head's shape. Not worth the fragility
+		-- for something that must never fail to show.
+		AlwaysOnTop = true,
 		LightInfluence = 0,
 		Size = UDim2.fromScale(1.5, 1.5),
-		-- StudsOffset is camera-relative, so +Z floats the plate just in front
-		-- of the head rather than z-fighting with the mesh.
-		StudsOffset = Vector3.new(0, 0.08, 0.62),
+		StudsOffset = Vector3.new(0, 0.08, 0),
 		MaxDistance = 300,
 	}, head)
 

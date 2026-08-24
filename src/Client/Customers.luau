@@ -317,6 +317,7 @@ local function buildRigCustomer()
 	return {
 		kind = "rig",
 		model = model,
+		root = root,
 		adornee = head or root,
 		billboardOffset = 2.4,
 		yOffset = yOffset,
@@ -326,22 +327,51 @@ local function buildRigCustomer()
 	}
 end
 
--- Fallback: the procedural alien, used when no rigs exist.
+-- Fallback: the procedural alien. Built from primitives but jointed and
+-- headed like a real character, so it takes the same animator and the same
+-- drawn face as an R15 rig -- no second code path, and no silent loss of
+-- limbs or expression when the avatar pool fails to build.
 local function buildAlienCustomer()
 	local alien = Alien.build(nextSeed)
 	nextSeed += 1
+
+	local highlight = Instance.new("Highlight")
+	highlight.FillColor = Color3.fromRGB(235, 60, 50)
+	highlight.FillTransparency = 1
+	highlight.OutlineTransparency = 1
+	highlight.Parent = alien.model
+
 	return {
 		kind = "alien",
 		model = alien.model,
-		alien = alien,
-		adornee = alien.root,
-		billboardOffset = alien.height + 2.4,
-		yOffset = 0,
+		root = alien.root,
+		adornee = alien.head,
+		billboardOffset = 2.4,
+		yOffset = alien.yOffset,
+		highlight = highlight,
+		rig = NpcAnimator.bind(alien.model),
+		face = Face.attach(alien.head),
 	}
 end
 
+local reportedFirst = false
+
 local function spawnCustomer(order)
 	local body = buildRigCustomer() or buildAlienCustomer()
+
+	-- One line, once, saying exactly what the first customer is made of. Every
+	-- symptom so far -- sliding, no limbs, no face -- looked like an animation
+	-- bug while actually being "this is not the body you think it is".
+	if not reportedFirst then
+		reportedFirst = true
+		print(("[AlienFoodCourt] customer body: kind=%s  joints=%s  face=%s  head=%s")
+			:format(
+				body.kind,
+				if body.rig then "bound" else "MISSING",
+				if body.face then "drawn" else "MISSING",
+				if body.adornee then body.adornee.Name else "none"
+			))
+	end
 
 	body.model.Parent = scene.folder
 
@@ -392,31 +422,21 @@ local function animate(entry, dt: number, walking: boolean, agitation: number): 
 	local clock = os.clock() + entry.bobSeed
 	local reacting = entry.phase == "reacting"
 
-	if body.kind == "rig" then
-		if not body.rig then
-			return 0
-		end
-		if reacting then
-			return if entry.mood == "angry"
-				then NpcAnimator.stomp(body.rig, clock)
-				else NpcAnimator.cheer(body.rig, clock)
-		end
-		if walking then
-			return NpcAnimator.walk(body.rig, dt)
-		end
-		return NpcAnimator.idle(body.rig, clock, agitation)
+	-- One path for both body kinds: the fallback alien is jointed with the
+	-- same R15 joint names, so it poses identically.
+	if not body.rig then
+		return 0
 	end
 
-	-- The procedural alien has no joints; it hops for joy and shakes in anger.
 	if reacting then
 		return if entry.mood == "angry"
-			then math.sin(clock * 26) * 0.09
-			else math.abs(math.sin(clock * 9)) * 0.4
+			then NpcAnimator.stomp(body.rig, clock)
+			else NpcAnimator.cheer(body.rig, clock)
 	end
-	if entry.phase == "queued" then
-		return math.sin(clock * 1.6) * 0.05
+	if walking then
+		return NpcAnimator.walk(body.rig, dt)
 	end
-	return 0
+	return NpcAnimator.idle(body.rig, clock, agitation)
 end
 
 -- --------------------------------------------------------------- public ----
@@ -628,17 +648,16 @@ function Customers.update(dt: number, _snapshot)
 			local calm = math.clamp((entry.expiresAt - clock) / span, 0, 1)
 			agitation = 1 - calm
 
-			if body.kind == "rig" then
-				body.highlight.FillTransparency = 1 - agitation * 0.45
-				if body.face then
-					-- A mild smile when they arrive, easing into a scowl as
-					-- the timer burns down. The expression is continuous, so
-					-- you can read how close someone is to walking out from
-					-- their face alone.
-					Face.tween(body.face, 0.35 - agitation * 1.1, dt)
-				end
-			else
-				Alien.setMood(body.alien, calm)
+			-- Both body kinds carry a highlight and a drawn face, so there is
+			-- no branch here any more.
+			body.highlight.FillTransparency = 1 - agitation * 0.45
+
+			if body.face then
+				-- A mild smile when they arrive, easing into a scowl as the
+				-- timer burns down. The expression is continuous, so you can
+				-- read how close someone is to walking out from their face
+				-- alone, before checking the patience bar.
+				Face.tween(body.face, 0.35 - agitation * 1.1, dt)
 			end
 
 			entry.bill.fill.Size = UDim2.fromScale(calm, 1)
@@ -661,7 +680,13 @@ function Customers.update(dt: number, _snapshot)
 			then position + heading.Unit
 			else position + Vector3.new(0, 0, 1)   -- squared up to the counter
 
-		body.model:PivotTo(CFrame.lookAt(position, lookAt))
+		-- Move the anchored root ONLY. Model:PivotTo sets every part's CFrame
+		-- while preserving their current offsets, which overwrites the pose
+		-- NpcAnimator just wrote into the joints -- the character slides along
+		-- frozen in whatever shape it happened to be in. Driving the root lets
+		-- the Motor6D chain carry the rest of the body, which is the whole
+		-- point of having joints.
+		body.root.CFrame = CFrame.lookAt(position, lookAt)
 	end
 end
 
