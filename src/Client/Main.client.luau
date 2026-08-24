@@ -155,12 +155,13 @@ local function handleEvent(event)
 
 	elseif kind == "graded" then
 		UI.flashGrade(refs, event)
+		-- The grade goes straight through: the customer picks their own
+		-- reaction face from it, so Perfect and Sloppy do not look identical.
+		Customers.markExit(event.orderId, event.grade)
 		if event.grade == "Fail" then
 			FoodStack.dump()
-			Customers.markExit(event.orderId, "angry")
 		else
 			FoodStack.serve()
-			Customers.markExit(event.orderId, "happy")
 			if event.grade == "Perfect" then
 				Scene.shake(0.35, 0.22)
 			end
@@ -168,7 +169,7 @@ local function handleEvent(event)
 
 	elseif kind == "expired" then
 		UI.flash(refs, "WALKED OUT", UI.COLOR.bad)
-		Customers.markExit(event.orderId, "angry")
+		Customers.markExit(event.orderId, "Expired")
 
 	elseif kind == "scrapped" or kind == "selected" then
 		-- Switching tickets abandons the plate, same as scrapping it. Showing

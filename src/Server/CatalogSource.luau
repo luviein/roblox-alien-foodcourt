@@ -43,6 +43,8 @@ local SLOTS = {
 	{ key = "Shirts",           assetTypeId = ASSET_TYPE.Shirt,         search = Enum.AvatarAssetType.Shirt,         keyword = "shirt" },
 	{ key = "Pants",            assetTypeId = ASSET_TYPE.Pants,         search = Enum.AvatarAssetType.Pants,         keyword = "pants" },
 	{ key = "Faces",            assetTypeId = ASSET_TYPE.Face,          search = Enum.AvatarAssetType.Face,          keyword = "face" },
+	{ key = "HappyFaces",       assetTypeId = ASSET_TYPE.Face,          search = Enum.AvatarAssetType.Face,          keyword = "smile" },
+	{ key = "AngryFaces",       assetTypeId = ASSET_TYPE.Face,          search = Enum.AvatarAssetType.Face,          keyword = "angry" },
 	{ key = "Hair",             assetTypeId = ASSET_TYPE.HairAccessory, search = Enum.AvatarAssetType.HairAccessory, keyword = "hair" },
 	{ key = "Hats",             assetTypeId = ASSET_TYPE.Hat,           search = Enum.AvatarAssetType.Hat,           keyword = "hat" },
 	{ key = "FaceAccessories",  assetTypeId = ASSET_TYPE.FaceAccessory, search = Enum.AvatarAssetType.FaceAccessory, keyword = "glasses" },

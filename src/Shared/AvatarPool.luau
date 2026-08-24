@@ -26,8 +26,17 @@ AvatarPool.POOL_SIZE = 14
 AvatarPool.Shirts = {}
 AvatarPool.Pants = {}
 
--- Face decal asset IDs.
+-- Face decal asset IDs -- the neutral face customers wear while queueing.
 AvatarPool.Faces = {}
+
+-- Reaction faces. The customer's actual face is swapped to one of these when
+-- their order lands or they walk out, so the emotion reads on the character
+-- rather than only in a bubble above them.
+--
+-- Leave these empty and they are auto-filled from the catalog ("smile" and
+-- "angry" face searches). Fill them to pick exactly which faces you want.
+AvatarPool.HappyFaces = {}
+AvatarPool.AngryFaces = {}
 
 -- Accessory asset IDs.
 AvatarPool.Hair = {13823150138,126263758311070,82005629783010,124004421267994,116805164568378}

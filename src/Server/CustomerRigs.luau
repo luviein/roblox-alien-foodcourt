@@ -118,6 +118,13 @@ function CustomerRigs.build()
 		-- Resolve and verify the asset pools first; both steps make web calls.
 		local pools = CatalogSource.resolve()
 
+		-- Publish the reaction faces as attributes so the client can swap a
+		-- customer's face when their order lands. Attributes replicate, and
+		-- the client reads them lazily, so it does not matter that this
+		-- resolves well after the first client has already connected.
+		folder:SetAttribute("HappyFace", pools.HappyFaces[1])
+		folder:SetAttribute("AngryFace", pools.AngryFaces[1])
+
 		local rng = Random.new()
 		local built = 0
 

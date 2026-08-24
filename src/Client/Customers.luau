@@ -11,13 +11,13 @@
 -- Each customer carries their own ticket on a BillboardGui above their head,
 -- so the order literally walks in with the person who wants it.
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local DishDefs = require(Shared.DishDefs)
 
 local Alien = require(script.Parent.Alien)
+local NpcAnimator = require(script.Parent.NpcAnimator)
 
 local Customers = {}
 
@@ -26,6 +26,26 @@ local WALK_SPEED = 9
 local LEAVE_SPEED = 11
 local LEAVE_DURATION = 1.2
 local ARRIVE_EPSILON = 0.25
+
+-- Customers hold their reaction for a beat before walking off. Without this
+-- they turn and leave on the same frame they are served, and the reaction is
+-- gone before you can read it.
+local REACT_DURATION = 0.75
+
+-- The emoji bubble is a second channel on top of the face swap, because a
+-- face is only a few pixels tall at this camera distance. Set false if you
+-- want the expression to read from the character alone.
+local SHOW_REACTION_BUBBLE = true
+
+-- How each outcome reads on the customer. Emoji need no asset ids and are
+-- legible at any distance, which face decals are not.
+local REACTIONS = {
+	Perfect = { emoji = "🤩", mood = "happy" },
+	Good    = { emoji = "😄", mood = "happy" },
+	Sloppy  = { emoji = "🙂", mood = "happy" },
+	Fail    = { emoji = "😠", mood = "angry" },
+	Expired = { emoji = "😡", mood = "angry" },
+}
 
 local COLOR = {
 	panel   = Color3.fromRGB(24, 26, 36),
@@ -42,59 +62,6 @@ local COLOR = {
 local scene: any = nil
 local active: { [number]: any } = {}
 local nextSeed = 1
-local animationIds: any = nil
-local animationsChecked = false
-
--- ------------------------------------------------------------ animations ---
-
--- Reads the default walk/idle animation ids off the local player's own Animate
--- script. That avoids hardcoding animation asset ids (which I would only be
--- guessing at) and stays correct if Roblox changes the defaults.
-local function defaultAnimationIds()
-	if animationsChecked then
-		return animationIds
-	end
-
-	local character = Players.LocalPlayer.Character
-	local animate = character and character:FindFirstChild("Animate")
-	if not animate then
-		return nil   -- character not loaded yet; try again on the next spawn
-	end
-
-	animationsChecked = true
-
-	local function idOf(groupName: string, animName: string): string?
-		local group = animate:FindFirstChild(groupName)
-		local anim = group and group:FindFirstChild(animName)
-		if anim and anim:IsA("Animation") and anim.AnimationId ~= "" then
-			return anim.AnimationId
-		end
-		return nil
-	end
-
-	animationIds = {
-		idle = idOf("idle", "Animation1"),
-		walk = idOf("walk", "WalkAnim"),
-	}
-	return animationIds
-end
-
-local function loadTrack(animator: Animator, id: string?): AnimationTrack?
-	if not id then
-		return nil
-	end
-	local animation = Instance.new("Animation")
-	animation.AnimationId = id
-	local ok, track = pcall(function()
-		return animator:LoadAnimation(animation)
-	end)
-	if not ok or not track then
-		return nil
-	end
-	track.Looped = true
-	track.Priority = Enum.AnimationPriority.Core
-	return track
-end
 
 -- ------------------------------------------------------------- billboard ---
 
@@ -240,6 +207,57 @@ local function buildBillboard(adornee: BasePart, heightOffset: number)
 	}
 end
 
+-- ------------------------------------------------------------------ face ---
+
+-- The reaction faces the server resolved and published as attributes on the
+-- rig folder. Read lazily: the server finishes resolving these well after the
+-- first client connects.
+local function reactionFaceId(mood: string): number?
+	local folder = ReplicatedStorage:FindFirstChild("CustomerRigs")
+	if not folder then
+		return nil
+	end
+	return folder:GetAttribute(if mood == "angry" then "AngryFace" else "HappyFace")
+end
+
+-- Swaps the decal on the customer's head. Passing nil restores whatever face
+-- they were built with.
+local function setFace(entry, assetId: number?)
+	local decal = entry.body.faceDecal
+	if not decal then
+		return
+	end
+	decal.Texture = if assetId
+		then ("rbxassetid://%d"):format(assetId)
+		else entry.body.neutralFace
+end
+
+-- A big emoji that pops above the head on serve or walk-out.
+local function buildReactionBubble(adornee: BasePart, heightOffset: number)
+	local gui = make("BillboardGui", {
+		Name = "Reaction",
+		Adornee = adornee,
+		AlwaysOnTop = true,
+		LightInfluence = 0,
+		Size = UDim2.fromScale(2.6, 2.6),
+		StudsOffset = Vector3.new(0, heightOffset, 0),
+		MaxDistance = 300,
+		Enabled = false,
+	}, adornee)
+
+	local label = make("TextLabel", {
+		Name = "Emoji",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		TextScaled = true,
+	}, gui)
+
+	return { gui = gui, label = label }
+end
+
 -- ------------------------------------------------------------------ life ---
 
 local function rigPool(): { Model }
@@ -275,15 +293,9 @@ local function buildRigCustomer()
 
 	model.PrimaryPart = root
 
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if not animator then
-		animator = Instance.new("Animator")
-		animator.Parent = humanoid
-	end
-
-	local ids = defaultAnimationIds()
-	local idleTrack = if ids then loadTrack(animator, ids.idle) else nil
-	local walkTrack = if ids then loadTrack(animator, ids.walk) else nil
+	-- Joint driver. Returns nil if this is not an R15 rig, in which case the
+	-- customer simply stands still rather than erroring.
+	local rig = NpcAnimator.bind(model)
 
 	-- Impatience is shown by tinting the whole customer rather than recolouring
 	-- body parts, which would fight with their clothing.
@@ -297,6 +309,9 @@ local function buildRigCustomer()
 	-- position without this offset would bury them to the waist.
 	local yOffset = humanoid.HipHeight + root.Size.Y / 2
 
+	-- The head's face decal, so reactions can change their actual expression.
+	local faceDecal = if head then head:FindFirstChildOfClass("Decal") else nil
+
 	return {
 		kind = "rig",
 		model = model,
@@ -304,8 +319,9 @@ local function buildRigCustomer()
 		billboardOffset = 2.4,
 		yOffset = yOffset,
 		highlight = highlight,
-		idleTrack = idleTrack,
-		walkTrack = walkTrack,
+		rig = rig,
+		faceDecal = faceDecal,
+		neutralFace = if faceDecal then faceDecal.Texture else "",
 	}
 end
 
@@ -329,13 +345,17 @@ local function spawnCustomer(order)
 	body.model.Parent = scene.folder
 
 	local bill = buildBillboard(body.adornee, body.billboardOffset)
+	local reaction = buildReactionBubble(body.adornee, body.billboardOffset - 0.5)
 	local spawnPosition = scene.spawnCFrame.Position
 
 	local entry = {
 		orderId = order.id,
 		body = body,
 		bill = bill,
+		reaction = reaction,
+		reactClock = 0,
 		position = spawnPosition,
+		lastPosition = spawnPosition,
 		targetPosition = spawnPosition,
 		phase = "arriving",
 		mood = nil,
@@ -343,7 +363,6 @@ local function spawnCustomer(order)
 		bobSeed = math.random() * 100,
 		createdAt = order.createdAt,
 		expiresAt = order.expiresAt,
-		playing = nil,
 	}
 
 	active[order.id] = entry
@@ -362,29 +381,41 @@ local function setModelTransparency(entry, alpha: number)
 		end
 	end
 	entry.bill.gui.Enabled = alpha < 0.9
+	entry.reaction.label.TextTransparency = alpha
 end
 
--- Swap between walk and idle without restarting a track that already plays.
-local function setAnimation(entry, wanted: string)
-	if entry.playing == wanted then
-		return
-	end
-	entry.playing = wanted
-
+-- Drives the rig's joints for this frame and returns the vertical bob to apply.
+-- The alien fallback has no joints, so it keeps its own gentle sway.
+local function animate(entry, dt: number, walking: boolean, agitation: number): number
 	local body = entry.body
-	if body.kind ~= "rig" then
-		return
+	local clock = os.clock() + entry.bobSeed
+	local reacting = entry.phase == "reacting"
+
+	if body.kind == "rig" then
+		if not body.rig then
+			return 0
+		end
+		if reacting then
+			return if entry.mood == "angry"
+				then NpcAnimator.stomp(body.rig, clock)
+				else NpcAnimator.cheer(body.rig, clock)
+		end
+		if walking then
+			return NpcAnimator.walk(body.rig, dt)
+		end
+		return NpcAnimator.idle(body.rig, clock, agitation)
 	end
 
-	local play = if wanted == "walk" then body.walkTrack else body.idleTrack
-	local stop = if wanted == "walk" then body.idleTrack else body.walkTrack
-
-	if stop then
-		stop:Stop(0.2)
+	-- The procedural alien has no joints; it hops for joy and shakes in anger.
+	if reacting then
+		return if entry.mood == "angry"
+			then math.sin(clock * 26) * 0.09
+			else math.abs(math.sin(clock * 9)) * 0.4
 	end
-	if play and not play.IsPlaying then
-		play:Play(0.2)
+	if entry.phase == "queued" then
+		return math.sin(clock * 1.6) * 0.05
 	end
+	return 0
 end
 
 -- --------------------------------------------------------------- public ----
@@ -401,14 +432,29 @@ function Customers.clear()
 	active = {}
 end
 
--- Called when the server reports why a ticket left, so the exit animation can
--- match. Events arrive inside the snapshot that drops the order, ahead of the
--- sync that notices it is gone.
-function Customers.markExit(orderId: number, mood: string)
+-- Called when the server reports how a ticket ended -- a grade name, or
+-- "Expired" for a walk-out. Events arrive inside the snapshot that drops the
+-- order, ahead of the sync that notices it is gone, so the reaction is set
+-- before anything starts leaving.
+function Customers.markExit(orderId: number, outcome: string)
 	local entry = active[orderId]
-	if entry and entry.phase ~= "leaving" then
-		entry.mood = mood
+	if not entry or entry.phase == "reacting" or entry.phase == "leaving" then
+		return
 	end
+
+	local reaction = REACTIONS[outcome] or REACTIONS.Expired
+
+	entry.mood = reaction.mood
+	entry.phase = "reacting"
+	entry.reactClock = 0
+
+	-- The expression goes on the customer's own face. The bubble is a second,
+	-- readable-at-distance channel -- the face alone is small on screen.
+	setFace(entry, reactionFaceId(reaction.mood))
+
+	entry.bill.gui.Enabled = false
+	entry.reaction.label.Text = reaction.emoji
+	entry.reaction.gui.Enabled = SHOW_REACTION_BUBBLE
 end
 
 local function renderTicket(entry, order, slotIndex: number, snapshot)
@@ -481,8 +527,10 @@ function Customers.sync(snapshot)
 		renderTicket(entry, order, slotIndex, snapshot)
 	end
 
+	-- Anything the snapshot dropped without an accompanying event just leaves
+	-- quietly; markExit has normally already put it into "reacting".
 	for orderId, entry in active do
-		if not seen[orderId] and entry.phase ~= "leaving" then
+		if not seen[orderId] and entry.phase ~= "leaving" and entry.phase ~= "reacting" then
 			entry.phase = "leaving"
 			entry.leaveClock = 0
 			entry.bill.gui.Enabled = false
@@ -499,8 +547,20 @@ function Customers.update(dt: number, _snapshot)
 
 	for _, entry in active do
 		local body = entry.body
+		local walking = true
+		local agitation = 0
 
-		if entry.phase == "leaving" then
+		if entry.phase == "reacting" then
+			-- Hold position and play the reaction before turning to leave.
+			entry.reactClock += dt
+			walking = false
+
+			if entry.reactClock >= REACT_DURATION then
+				entry.phase = "leaving"
+				entry.leaveClock = 0
+			end
+
+		elseif entry.phase == "leaving" then
 			entry.leaveClock += dt
 
 			local angry = entry.mood == "angry"
@@ -517,7 +577,6 @@ function Customers.update(dt: number, _snapshot)
 				entry.position += toGoal.Unit * math.min(toGoal.Magnitude, speed * dt)
 			end
 
-			setAnimation(entry, "walk")
 			setModelTransparency(entry, math.clamp(entry.leaveClock / LEAVE_DURATION, 0, 1))
 
 			if entry.leaveClock >= LEAVE_DURATION then
@@ -531,20 +590,19 @@ function Customers.update(dt: number, _snapshot)
 			if distance > ARRIVE_EPSILON then
 				entry.position += toTarget.Unit * math.min(distance, WALK_SPEED * dt)
 				entry.phase = "arriving"
-				setAnimation(entry, "walk")
 			else
 				entry.position = entry.targetPosition
 				entry.phase = "queued"
-				setAnimation(entry, "idle")
+				walking = false
 			end
 
 			-- Patience, made visible.
 			local span = math.max(entry.expiresAt - entry.createdAt, 0.001)
 			local calm = math.clamp((entry.expiresAt - clock) / span, 0, 1)
-			local anger = 1 - calm
+			agitation = 1 - calm
 
 			if body.kind == "rig" then
-				body.highlight.FillTransparency = 1 - anger * 0.45
+				body.highlight.FillTransparency = 1 - agitation * 0.45
 			else
 				Alien.setMood(body.alien, calm)
 			end
@@ -556,17 +614,20 @@ function Customers.update(dt: number, _snapshot)
 				else COLOR.bad
 		end
 
-		-- Position. Rigs get no procedural bob at all -- their idle animation
-		-- already breathes, and layering a sine wave on top is what produced
-		-- the vibrating. The fallback alien gets one slow, fixed-rate bob:
-		-- never scaled by impatience, which is what made it buzz.
-		local lift = 0
-		if body.kind == "alien" and entry.phase == "queued" then
-			lift = math.sin((os.clock() + entry.bobSeed) * 1.6) * 0.05
-		end
+		-- Face the direction of travel while walking in or out, then turn to
+		-- the counter once settled -- otherwise they moonwalk to their slot.
+		local travel = if walking then entry.position - entry.lastPosition else Vector3.zero
+		local heading = Vector3.new(travel.X, 0, travel.Z)
+		entry.lastPosition = entry.position
 
+		local lift = animate(entry, dt, walking, agitation)
 		local position = entry.position + Vector3.new(0, body.yOffset + lift, 0)
-		body.model:PivotTo(CFrame.lookAt(position, position + Vector3.new(0, 0, 1)))
+
+		local lookAt = if heading.Magnitude > 0.001
+			then position + heading.Unit
+			else position + Vector3.new(0, 0, 1)   -- squared up to the counter
+
+		body.model:PivotTo(CFrame.lookAt(position, lookAt))
 	end
 end
 
