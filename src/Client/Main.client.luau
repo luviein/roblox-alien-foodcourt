@@ -23,6 +23,7 @@ local Scene = require(script.Parent.Scene)
 local Customers = require(script.Parent.Customers)
 local FoodStack = require(script.Parent.FoodStack)
 local Loading = require(script.Parent.Loading)
+local Settings = require(script.Parent.Settings)
 local SettingsUI = require(script.Parent.SettingsUI)
 local UI = require(script.Parent.UI)
 
@@ -104,6 +105,12 @@ local refs = UI.build(playerGui, {
 })
 
 SettingsUI.build(playerGui)
+
+-- Push preference changes to the profile. Debounced by the fact that the panel
+-- only fires on an actual change.
+Settings.onChanged = function()
+	sendAction({ action = "settings", values = Settings.values })
+end
 
 -- ----------------------------------------------------------------- input ---
 
@@ -294,6 +301,10 @@ Remotes.ShiftUpdate.OnClientEvent:Connect(function(newSnapshot)
 	end
 
 	snapshot = newSnapshot
+
+	if newSnapshot.profile then
+		Settings.apply(newSnapshot.profile.settings)
+	end
 
 	UI.render(refs, snapshot)
 	Customers.sync(snapshot)

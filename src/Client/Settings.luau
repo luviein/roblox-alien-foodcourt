@@ -3,8 +3,8 @@
 -- need to know about Audio, Customers or Scene, and they do not need to know
 -- about the panel.
 --
--- Session-only for now: there is no saving anywhere in the game yet. When
--- DataService arrives in P2 these values get persisted with everything else.
+-- Persisted through the profile: `apply` takes what the server loaded, and
+-- `onChanged` sends edits back.
 
 local Settings = {}
 
@@ -20,12 +20,34 @@ Settings.values = {
 -- (Scene, Customers) just read `Settings.values` when they use it.
 Settings.changed = Instance.new("BindableEvent")
 
+-- Set by the client once, so a change can be pushed to the server to persist.
+-- Settings lives below Audio and the panel in the dependency order, so it
+-- cannot reach the network itself.
+Settings.onChanged = nil :: any
+
 function Settings.set(key: string, value: any)
 	if Settings.values[key] == value then
 		return
 	end
 	Settings.values[key] = value
 	Settings.changed:Fire(key, value)
+	if Settings.onChanged then
+		Settings.onChanged(key, value)
+	end
+end
+
+-- Applied from a loaded profile. Fires nothing back at the server: this IS the
+-- server's value, and echoing it would be a pointless round trip.
+function Settings.apply(values)
+	if typeof(values) ~= "table" then
+		return
+	end
+	for key, value in values do
+		if Settings.values[key] ~= nil and Settings.values[key] ~= value then
+			Settings.values[key] = value
+			Settings.changed:Fire(key, value)
+		end
+	end
 end
 
 function Settings.get(key: string): any

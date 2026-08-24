@@ -10,6 +10,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 
+local DataService = require(script.Parent.DataService)
 local Kitchen = require(script.Parent.Kitchen)
 
 -- The only keys the station will ever accept. Anything else is dropped
@@ -50,6 +51,17 @@ local function pushSnapshot(player: Player)
 		return
 	end
 	local snapshot = kitchen:snapshot()
+
+	-- The profile rides along so the HUD can show cash without another remote.
+	local profile = DataService.get(player)
+	if profile then
+		snapshot.profile = {
+			cash = profile.cash,
+			debtPaid = profile.debtPaid,
+			settings = profile.settings,
+			temporary = DataService.isTemporary(player),
+		}
+	end
 	snapshot.events = kitchen:drainEvents()
 	Remotes.ShiftUpdate:FireClient(player, snapshot)
 end
@@ -128,6 +140,21 @@ local function onStationAction(player: Player, payload: any)
 		end
 		kitchen:selectSlot(slot)
 
+	elseif action == "settings" then
+		-- Client owns its own preferences; the server only stores them.
+		local values = payload.values
+		if typeof(values) ~= "table" then
+			return
+		end
+		DataService.update(player, function(data)
+			for key, value in values do
+				if data.settings[key] ~= nil and typeof(data.settings[key]) == typeof(value) then
+					data.settings[key] = value
+				end
+			end
+		end)
+		return
+
 	elseif action == "searStart" then
 		kitchen:searStart()
 
@@ -160,6 +187,20 @@ local function startTickLoop()
 			for player, kitchen in kitchens do
 				local before = kitchen.state
 				kitchen:tick()
+
+				-- A shift that just ended pays into the profile. Doing it here
+				-- rather than inside Kitchen keeps the gameplay state machine
+				-- unaware of saving.
+				if before == "Service" and kitchen.state == "Results" then
+					DataService.update(player, function(data)
+						data.cash += kitchen.score
+						data.stats.shifts += 1
+						data.stats.served += kitchen.stats.served
+						data.stats.bestScore = math.max(data.stats.bestScore, kitchen.score)
+						data.stats.bestCombo = math.max(data.stats.bestCombo, kitchen.bestCombo)
+					end)
+					DataService.save(player)
+				end
 				-- Idle kitchens have nothing moving; skip the traffic unless
 				-- the state just changed.
 				if kitchen.state ~= "Idle" or before ~= "Idle" then
