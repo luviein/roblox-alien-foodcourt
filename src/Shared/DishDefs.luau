@@ -185,7 +185,6 @@ DishDefs.Dishes = {
 		orderStrict = true,
 		components = {
 			{ key = "Q", id = "basket_load",  required = true },
-			{ key = "S", id = "basket_shake", required = true },
 			{ key = "W", id = "basket_lower", required = true },
 		},
 		fry = { cookTime = 4, perfect = 1.2, good = 2.5, burn = 5 },

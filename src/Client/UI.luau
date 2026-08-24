@@ -503,13 +503,30 @@ function UI.render(refs, snapshot)
 		refs.prepTitle.Text = string.upper(dish and dish.displayName or activeOrder.dishId)
 	end
 
+	-- SPACE is the commit key for every dish, but it commits different things:
+	-- lower the basket, hand over the plate, collect what is ready.
+	if cookState == "raw" then
+		refs.actionBar.serve.Text = "FRY  [space]"
+	elseif cookState == "ready" then
+		refs.actionBar.serve.Text = "COLLECT  [space]"
+	elseif cookState == "burnt" then
+		refs.actionBar.serve.Text = "BIN IT  [space]"
+	else
+		refs.actionBar.serve.Text = "SERVE  [space]"
+	end
+
 	-- Fried orders have no plate. The readout carries the cook prompt instead,
 	-- and while it is counting down renderTimers owns the text -- writing it
 	-- from both places is what made it flicker.
 	local cookState = activeOrder and activeOrder.cookState
 
+	local steps = if activeOrder then #activeOrder.required else 0
+	local doneSteps = #snapshot.build
+
 	if cookState == "raw" then
-		refs.plateReadout.Text = string.format("STEP  %d / %d", #snapshot.build, if activeOrder then #activeOrder.required else 0)
+		refs.plateReadout.Text = if doneSteps >= steps
+			then "SPACE to fry"
+			else string.format("STEP  %d / %d", doneSteps, steps)
 	elseif cookState == "burnt" then
 		refs.plateReadout.Text = "BURNT   SPACE to bin it"
 	elseif cookState ~= "cooking" and cookState ~= "ready" then
@@ -527,21 +544,54 @@ function UI.render(refs, snapshot)
 		end
 	end
 
+	-- Which key comes next, and which are already done. Without this the panel
+	-- showed a row of identical buttons and gave no clue why pressing an
+	-- already-used one did nothing.
+	local nextKey = nil
+	local doneKeys = {}
+	if activeOrder then
+		for index = 1, #snapshot.build do
+			doneKeys[activeOrder.keys[index]] = true
+		end
+		nextKey = activeOrder.keys[#snapshot.build + 1]
+	end
+
 	for key, entry in refs.keyGrid.buttons do
 		local ingredientId = keyToIngredient[key]
-		if ingredientId then
-			entry.name.Text = DishDefs.ingredientName(ingredientId)
-			entry.swatch.BackgroundColor3 = DishDefs.ingredientColor(ingredientId)
-			entry.swatch.BackgroundTransparency = 0
-			entry.letter.TextColor3 = COLOR.text
-			entry.button.BackgroundTransparency = 0.15
-			entry.stroke.Color = COLOR.stroke
-		else
+
+		if not ingredientId then
+			-- Not part of this dish at all.
 			entry.name.Text = ""
 			entry.swatch.BackgroundTransparency = 1
 			entry.letter.TextColor3 = COLOR.stroke
 			entry.button.BackgroundTransparency = 0.55
 			entry.stroke.Color = COLOR.panel
+			entry.stroke.Thickness = 2
+			continue
+		end
+
+		entry.name.Text = DishDefs.ingredientName(ingredientId)
+		entry.swatch.BackgroundColor3 = DishDefs.ingredientColor(ingredientId)
+		entry.swatch.BackgroundTransparency = 0
+
+		if key == nextKey then
+			-- Do this one.
+			entry.letter.TextColor3 = COLOR.text
+			entry.button.BackgroundTransparency = 0.05
+			entry.stroke.Color = COLOR.accent
+			entry.stroke.Thickness = 3
+		elseif doneKeys[key] then
+			-- Already done: still legible, clearly spent.
+			entry.letter.TextColor3 = COLOR.dim
+			entry.button.BackgroundTransparency = 0.45
+			entry.stroke.Color = COLOR.good
+			entry.stroke.Thickness = 2
+			entry.swatch.BackgroundTransparency = 0.6
+		else
+			entry.letter.TextColor3 = COLOR.text
+			entry.button.BackgroundTransparency = 0.15
+			entry.stroke.Color = COLOR.stroke
+			entry.stroke.Thickness = 2
 		end
 	end
 end

@@ -246,17 +246,6 @@ function Kitchen:addIngredient(key: string)
 			complete = complete,
 		})
 
-		-- Finishing a fried dish's prep sequence lowers the basket, and from
-		-- there it cooks on its own. No separate key for "start": completing
-		-- the steps IS starting it.
-		if complete and order.cookState == "raw" then
-			self:startCook(order)
-			self.build = {}
-			-- Drop it from the hand so the prep panel closes and you are moved
-			-- on to whatever needs doing while this cooks.
-			self.activeOrderId = nil
-			self:validateSelection()
-		end
 		return
 	end
 
@@ -389,7 +378,19 @@ end
 function Kitchen:handleFryOrder(order): boolean
 	local t = now()
 
-	if order.cookState == "raw" or order.cookState == "cooking" then
+	if order.cookState == "raw" then
+		-- SPACE is the commit for every dish. Here it drops the basket in --
+		-- but only once the prep steps are done, so it cannot skip them.
+		if #self.build == #order.required and buildMatches(self.build, order.required) then
+			self:startCook(order)
+			self.build = {}
+			-- Out of your hands: the panel closes and the countdown carries on
+			-- over the customer's head while you do something else.
+			self.activeOrderId = nil
+		end
+		return true
+
+	elseif order.cookState == "cooking" then
 		-- Nothing to collect yet. Deliberately a no-op rather than a raw
 		-- collection: failing an order that is merely still cooking punishes a
 		-- stray keypress, and a stray keypress aimed at one ticket should never
