@@ -1,0 +1,49 @@
+--!strict
+-- Every sound the game uses, in one place.
+--
+-- Asset ids only load if the audio is public -- Roblox-published audio always
+-- is, most user uploads are not. An id set to 0 is simply skipped, so half a
+-- soundtrack never breaks anything.
+
+local SoundDefs = {}
+
+-- One-shots. `volume` is relative to the SFX slider; `pitchJitter` randomises
+-- PlaybackSpeed a little each time so a sound played hundreds of times a round
+-- does not turn into a machine gun.
+SoundDefs.Sfx = {
+	click = {
+		id = 70862388846559,
+		volume = 0.55,
+		pitchJitter = 0.06,   -- ingredient added; the most repeated sound here
+	},
+	wrongOrder = {
+		id = 131268007007000,
+		volume = 0.85,
+		pitchJitter = 0.02,   -- also the walk-out sting
+	},
+	maxCombo = {
+		id = 130014350102430,
+		volume = 0.8,
+		pitchJitter = 0,      -- fires once per streak, so keep it identical
+	},
+	roundComplete = {
+		id = 2940337254,
+		volume = 0.9,
+		pitchJitter = 0,
+	},
+
+	-- Not sourced yet. Left at 0 so they no-op rather than erroring.
+	ticketArrive = { id = 0, volume = 0.6, pitchJitter = 0.04 },
+	serveSuccess = { id = 0, volume = 0.7, pitchJitter = 0.03 },
+	fumble       = { id = 0, volume = 0.4, pitchJitter = 0.05 },
+}
+
+-- Played in order, then looped back to the start.
+SoundDefs.Music = {
+	85881788376421,
+	90665611745011,
+	113772778748041,
+	71516573136394,
+}
+
+return SoundDefs

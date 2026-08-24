@@ -10,6 +10,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 
+local Settings = require(script.Parent.Settings)
+
 local Scene = {}
 
 local ORIGIN = Vector3.new(0, 500, 0)
@@ -179,6 +181,9 @@ local shakeDecay = 1
 -- A short kick on the camera. Used sparingly: Perfect serves and fumbles only.
 -- Failure gets a dull thud and no shake -- never reward a mistake with spectacle.
 function Scene.shake(amount: number, duration: number?)
+	if not Settings.values.screenShake then
+		return
+	end
 	shakeAmount = math.max(shakeAmount, amount)
 	shakeDecay = 1 / math.max(duration or 0.25, 0.05)
 end

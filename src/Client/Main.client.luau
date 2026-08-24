@@ -14,12 +14,15 @@ local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 
+local Audio = require(script.Parent.Audio)
 local Scene = require(script.Parent.Scene)
 local Customers = require(script.Parent.Customers)
 local FoodStack = require(script.Parent.FoodStack)
 local Loading = require(script.Parent.Loading)
+local SettingsUI = require(script.Parent.SettingsUI)
 local UI = require(script.Parent.UI)
 
 local player = Players.LocalPlayer
@@ -35,6 +38,10 @@ local ready = false
 -- stranding the player on a loading screen.
 local BOOT_TIMEOUT = 30
 
+-- Tracks whether the combo has already topped out this streak, so the max-combo
+-- sting fires on the way up and not on every serve afterwards.
+local comboWasMaxed = false
+
 -- ----------------------------------------------------------------- scene ---
 
 Scene.applyLighting()
@@ -44,6 +51,7 @@ Scene.parkCharacter()
 
 Customers.init(scene)
 FoodStack.init(scene)
+Audio.init()
 
 -- --------------------------------------------------------------- intents ---
 
@@ -84,6 +92,8 @@ local refs = UI.build(playerGui, {
 	onSelect = onSelect,
 	onStart = onStart,
 })
+
+SettingsUI.build(playerGui)
 
 -- ----------------------------------------------------------------- input ---
 
@@ -164,37 +174,64 @@ local function handleEvent(event)
 
 	if kind == "ingredientAdded" then
 		UI.pulseKey(refs, event.key, true)
+		Audio.play("click")
 
 	elseif kind == "fumble" then
 		UI.pulseKey(refs, event.key, false)
 		Scene.shake(0.12, 0.18)
+		Audio.play("fumble")
 
 	elseif kind == "graded" then
 		UI.flashGrade(refs, event)
 		-- The grade goes straight through: the customer picks their own
 		-- reaction face from it, so Perfect and Sloppy do not look identical.
 		Customers.markExit(event.orderId, event.grade)
+
 		if event.grade == "Fail" then
 			FoodStack.dump()
+			Audio.play("wrongOrder")
 		else
 			FoodStack.serve()
+			Audio.play("serveSuccess")
 			if event.grade == "Perfect" then
 				Scene.shake(0.35, 0.22)
 			end
 		end
 
+		-- Only when the streak actually tops out, and only on the way up --
+		-- otherwise it retriggers on every serve for the rest of the round.
+		local atMax = event.comboMult >= Config.COMBO_MAX
+		if atMax and not comboWasMaxed then
+			Audio.play("maxCombo")
+		end
+		comboWasMaxed = atMax
+
 	elseif kind == "expired" then
 		UI.flash(refs, "WALKED OUT", UI.COLOR.bad)
 		Customers.markExit(event.orderId, "Expired")
+		Audio.play("wrongOrder")
+		comboWasMaxed = false
 
 	elseif kind == "scrapped" or kind == "selected" then
 		-- Switching tickets abandons the plate, same as scrapping it. Showing
 		-- the food hit the floor makes that cost legible instead of silent.
 		FoodStack.dump()
 
-	elseif kind == "shiftStarted" or kind == "shiftEnded" then
+	elseif kind == "orderArrived" then
+		Audio.play("ticketArrive")
+
+	elseif kind == "shiftStarted" then
 		Customers.clear()
 		FoodStack.clear()
+		comboWasMaxed = false
+		Audio.startMusic()
+
+	elseif kind == "shiftEnded" then
+		Customers.clear()
+		FoodStack.clear()
+		comboWasMaxed = false
+		Audio.stopMusic()
+		Audio.play("roundComplete")
 	end
 end
 

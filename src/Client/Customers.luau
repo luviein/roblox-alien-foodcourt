@@ -19,6 +19,7 @@ local DishDefs = require(Shared.DishDefs)
 local Alien = require(script.Parent.Alien)
 local NpcAnimator = require(script.Parent.NpcAnimator)
 local Face = require(script.Parent.Face)
+local Settings = require(script.Parent.Settings)
 
 local Customers = {}
 
@@ -32,11 +33,6 @@ local ARRIVE_EPSILON = 0.25
 -- they turn and leave on the same frame they are served, and the reaction is
 -- gone before you can read it.
 local REACT_DURATION = 0.75
-
--- The emoji bubble is a second channel on top of the face swap, because a
--- face is only a few pixels tall at this camera distance. Set false if you
--- want the expression to read from the character alone.
-local SHOW_REACTION_BUBBLE = true
 
 -- How each outcome reads on the customer. Emoji need no asset ids and are
 -- legible at any distance, which face decals are not.
@@ -604,7 +600,7 @@ function Customers.markExit(orderId: number, outcome: string)
 
 	entry.bill.gui.Enabled = false
 	entry.reaction.label.Text = reaction.emoji
-	entry.reaction.gui.Enabled = SHOW_REACTION_BUBBLE
+	entry.reaction.gui.Enabled = Settings.values.reactionBubbles
 end
 
 local function renderTicket(entry, order, slotIndex: number, snapshot)
