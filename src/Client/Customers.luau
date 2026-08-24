@@ -618,6 +618,23 @@ local function renderTicket(entry, order, slotIndex: number, snapshot)
 	bill.stroke.Color = if isActive then COLOR.accent else COLOR.stroke
 	bill.stroke.Thickness = if isActive then 3 else 2
 
+	-- Fryer orders have nothing to assemble, so their ticket says where to go
+	-- instead of listing ingredients it does not have.
+	if order.station ~= "Prep" then
+		local first = bill.rows[1]
+		first.frame.Visible = true
+		first.key.Text = "2"
+		first.key.BackgroundColor3 = COLOR.warn
+		first.key.TextColor3 = Color3.fromRGB(16, 17, 24)
+		first.name.Text = "at the Fryer"
+		first.name.TextColor3 = COLOR.dim
+
+		for index = 2, MAX_ROWS do
+			bill.rows[index].frame.Visible = false
+		end
+		return
+	end
+
 	for index = 1, MAX_ROWS do
 		local row = bill.rows[index]
 		local ingredientId = order.required[index]

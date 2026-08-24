@@ -77,7 +77,9 @@ function OrderService.create(bag: Bag, orderId: number, now: number): Order
 	local required: { string } = {}
 	local keys: { string } = {}
 
-	for _, component in dish.components do
+	-- Fryer dishes have no components: nothing is assembled, so the ticket
+	-- lists nothing and both arrays stay empty.
+	for _, component in (dish.components or {}) do
 		local include = component.required or bag.rng:NextNumber() < OPTIONAL_CHANCE
 		if include then
 			table.insert(required, component.id)
@@ -88,6 +90,7 @@ function OrderService.create(bag: Bag, orderId: number, now: number): Order
 	return {
 		id = orderId,
 		dishId = dishId,
+		station = dish.station,
 		required = required,
 		keys = keys,
 		createdAt = now,

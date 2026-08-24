@@ -85,6 +85,7 @@ DishDefs.Dishes = {
 		id = "burger",
 		displayName = "Cheeseburger",
 		alienName = "the layered brown disc",
+		station = "Prep",
 		archetype = "Assembly",
 		baseValue = 45,
 		orderStrict = true,
@@ -105,6 +106,7 @@ DishDefs.Dishes = {
 		id = "hotdog",
 		displayName = "Hot Dog",
 		alienName = "the tube in the trench",
+		station = "Prep",
 		archetype = "Assembly",
 		baseValue = 32,
 		orderStrict = true,
@@ -124,6 +126,7 @@ DishDefs.Dishes = {
 		id = "taco",
 		displayName = "Taco",
 		alienName = "the folded field rations",
+		station = "Prep",
 		archetype = "Assembly",
 		baseValue = 38,
 		orderStrict = true,
@@ -138,10 +141,46 @@ DishDefs.Dishes = {
 		tags = { "Hot", "Fresh", "Savory" },
 		workload = { dishLoad = 1, trashLoad = 2, greaseLoad = 1, messRisk = 2, prepTime = 2 },
 	},
+
+	-- Fryer dishes. No components: you drop a basket and pull it at the right
+	-- moment, and the whole skill is in when you come back for it.
+	--
+	--   cookTime  : seconds until the basket is ready
+	--   perfect   : seconds after ready that still counts as Perfect
+	--   good      : ... as Good. Past that and up to `burn` is Sloppy.
+	--   burn      : seconds after ready before it is ruined outright
+	fries = {
+		id = "fries",
+		displayName = "Fries",
+		alienName = "the salted golden splinters",
+		station = "Fryer",
+		archetype = "Fry",
+		baseValue = 28,
+		fry = { cookTime = 9, perfect = 2.5, good = 5, burn = 9 },
+		tags = { "Hot", "Fried", "Greasy" },
+		workload = { dishLoad = 0, trashLoad = 2, greaseLoad = 3, messRisk = 1, prepTime = 1 },
+	},
+
+	onion_rings = {
+		id = "onion_rings",
+		displayName = "Onion Rings",
+		alienName = "the crunchy orbits",
+		station = "Fryer",
+		archetype = "Fry",
+		baseValue = 36,
+		fry = { cookTime = 12, perfect = 2, good = 4, burn = 7 },
+		tags = { "Hot", "Fried", "Greasy" },
+		workload = { dishLoad = 0, trashLoad = 2, greaseLoad = 3, messRisk = 1, prepTime = 1 },
+	},
 }
 
--- What can show up on tickets in P0. Later this becomes the player's drafted menu.
-DishDefs.ActiveMenu = { "burger", "hotdog", "taco" }
+-- What can show up on tickets. Later this becomes the player's drafted menu.
+DishDefs.ActiveMenu = { "burger", "hotdog", "taco", "fries", "onion_rings" }
+
+function DishDefs.stationOf(dishId: string): string?
+	local dish = DishDefs.Dishes[dishId]
+	return dish and dish.station or nil
+end
 
 function DishDefs.get(dishId: string)
 	return DishDefs.Dishes[dishId]

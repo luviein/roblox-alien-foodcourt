@@ -43,6 +43,31 @@ function ScoreService.grade(order, now: number, buildCorrect: boolean): Grade
 	return "Sloppy"
 end
 
+-- How precisely the basket came out of the oil. `overshoot` is seconds past
+-- the moment it was ready; negative means it was pulled raw.
+function ScoreService.fryGrade(overshoot: number, fry): Grade
+	if not fry then
+		return "Sloppy"
+	end
+	if overshoot < 0 then
+		return "Fail"          -- raw
+	elseif overshoot <= fry.perfect then
+		return "Perfect"
+	elseif overshoot <= fry.good then
+		return "Good"
+	end
+	return "Sloppy"
+end
+
+local GRADE_RANK = { Perfect = 4, Good = 3, Sloppy = 2, Fail = 1 }
+
+-- The lower of two grades. A fried order is judged on both the pull and the
+-- customer's patience, and the worse one wins -- a flawless pull cannot
+-- rescue a ticket you left sitting.
+function ScoreService.worst(a: Grade, b: Grade): Grade
+	return if (GRADE_RANK[a] or 0) <= (GRADE_RANK[b] or 0) then a else b
+end
+
 function ScoreService.comboMultiplier(combo: number): number
 	return math.min(1 + combo * Config.COMBO_STEP, Config.COMBO_MAX)
 end

@@ -11,6 +11,7 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local DishDefs = require(Shared.DishDefs)
+local StationDefs = require(Shared.StationDefs)
 
 local UI = {}
 
@@ -32,6 +33,9 @@ local KEY_ROWS = {
 	{ "Q", "W", "E", "R", "T" },
 	{ "A", "S", "D", "F", "G" },
 }
+
+-- The two fryer baskets, in basket order.
+local FRYER_KEYS = { "Q", "W" }
 
 -- ---------------------------------------------------------------- helpers --
 
@@ -133,6 +137,87 @@ local function buildTopBar(parent: Instance)
 	make("UITextSizeConstraint", { MaxTextSize = 34 }, combo)
 
 	return { frame = bar, score = score, time = timeLabel, timeFill = timeFill, combo = combo }
+end
+
+-- One button per station, showing its number key and how much is waiting
+-- there. The badge is the whole point: you have to be able to tell the fryer
+-- needs you while you are standing at Prep with your back to it.
+local function buildStationBar(parent: Instance, onStation: (number) -> ())
+	local bar = make("Frame", {
+		Name = "StationBar",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.5, 0.525),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Size = UDim2.fromScale(0.56, 0.055),
+	}, parent)
+
+	make("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	}, bar)
+
+	local buttons = {}
+
+	for index, stationId in StationDefs.Order do
+		local station = StationDefs.get(stationId)
+
+		local button = make("TextButton", {
+			Name = stationId,
+			BackgroundColor3 = COLOR.panel,
+			BackgroundTransparency = 0.15,
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			LayoutOrder = index,
+			Size = UDim2.fromScale(0.3, 1),
+			Text = "",
+		}, bar)
+		corner(button, 8)
+		local buttonStroke = stroke(button, COLOR.stroke, 2)
+
+		local label = make("TextLabel", {
+			Name = "Label",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.06, 0),
+			Size = UDim2.fromScale(0.88, 1),
+			Font = Enum.Font.GothamBold,
+			Text = ("%s  %s"):format(station.key, string.upper(station.displayName)),
+			TextColor3 = COLOR.dim,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}, button)
+		make("UITextSizeConstraint", { MaxTextSize = 15 }, label)
+
+		local badge = make("TextLabel", {
+			Name = "Badge",
+			BackgroundColor3 = COLOR.warn,
+			BorderSizePixel = 0,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.fromScale(0.96, 0.5),
+			Size = UDim2.fromOffset(24, 24),
+			Font = Enum.Font.GothamBold,
+			Text = "0",
+			TextColor3 = COLOR.bg,
+			TextSize = 13,
+			Visible = false,
+		}, button)
+		corner(badge, 12)
+
+		button.Activated:Connect(function()
+			onStation(index)
+		end)
+
+		buttons[index] = {
+			id = stationId,
+			button = button,
+			stroke = buttonStroke,
+			label = label,
+			badge = badge,
+		}
+	end
+
+	return { frame = bar, buttons = buttons }
 end
 
 local function buildPlateReadout(parent: Instance)
@@ -391,6 +476,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		screen = screen,
 		root = root,
 		topBar = buildTopBar(root),
+		stationBar = buildStationBar(root, callbacks.onStation),
 		plateReadout = buildPlateReadout(root),
 		keyGrid = buildKeyGrid(root, callbacks.onKey),
 		actionBar = buildActionBar(root, callbacks.onServe, callbacks.onScrap),
@@ -449,9 +535,56 @@ function UI.render(refs, snapshot)
 		then string.format("PLATE  %d / %d", #snapshot.build, total)
 		else ""
 
+	-- Station bar: highlight where you are, and badge what is waiting elsewhere.
+	local waiting = {}
+	for _, order in snapshot.orders do
+		waiting[order.station] = (waiting[order.station] or 0) + 1
+	end
+
+	for _, entry in refs.stationBar.buttons do
+		local isHere = entry.id == snapshot.activeStation
+		entry.stroke.Color = if isHere then COLOR.accent else COLOR.stroke
+		entry.stroke.Thickness = if isHere then 3 else 2
+		entry.label.TextColor3 = if isHere then COLOR.text else COLOR.dim
+
+		-- Anything needing attention at the fryer outranks a plain queue count:
+		-- a basket about to burn is the thing you must not miss.
+		local alert = nil
+		if entry.id == "Fryer" and snapshot.baskets then
+			for _, basket in snapshot.baskets do
+				if basket.state == "burnt" then
+					alert = { text = "!", color = COLOR.bad }
+					break
+				elseif basket.state == "ready" then
+					alert = { text = "!", color = COLOR.good }
+				end
+			end
+		end
+
+		local count = waiting[entry.id] or 0
+		if alert then
+			entry.badge.Visible = true
+			entry.badge.Text = alert.text
+			entry.badge.BackgroundColor3 = alert.color
+		elseif count > 0 then
+			entry.badge.Visible = true
+			entry.badge.Text = tostring(count)
+			entry.badge.BackgroundColor3 = COLOR.warn
+		else
+			entry.badge.Visible = false
+		end
+	end
+
+	-- Key grid. Same ten buttons at every station, relabelled for whatever the
+	-- station does: ingredients at Prep, baskets at the Fryer.
+	if snapshot.activeStation == "Fryer" then
+		UI.renderFryerKeys(refs, snapshot)
+		return
+	end
+
 	local dish = if activeOrder then DishDefs.get(activeOrder.dishId) else nil
 	local keyToIngredient = {}
-	if dish then
+	if dish and dish.components then
 		for _, component in dish.components do
 			keyToIngredient[component.key] = component.id
 		end
@@ -476,6 +609,59 @@ function UI.render(refs, snapshot)
 	end
 end
 
+-- Q and W are the two baskets. The same key drops, pulls and clears depending
+-- on what the basket is doing, so the fryer never needs more than two keys.
+function UI.renderFryerKeys(refs, snapshot)
+	local baskets = snapshot.baskets or {}
+
+	-- Everything that is not a basket key goes dark.
+	for key, entry in refs.keyGrid.buttons do
+		entry.name.Text = ""
+		entry.swatch.BackgroundTransparency = 1
+		entry.letter.TextColor3 = COLOR.stroke
+		entry.button.BackgroundTransparency = 0.55
+		entry.stroke.Color = COLOR.panel
+		entry.letter.Text = key
+	end
+
+	local pending = 0
+	for _, order in snapshot.orders do
+		if order.station == "Fryer" then
+			pending += 1
+		end
+	end
+
+	for index, key in FRYER_KEYS do
+		local entry = refs.keyGrid.buttons[key]
+		local basket = baskets[index]
+		if not entry or not basket then
+			continue
+		end
+
+		entry.button.BackgroundTransparency = 0.15
+		entry.letter.TextColor3 = COLOR.text
+		entry.swatch.BackgroundTransparency = 0
+
+		if basket.state == "empty" then
+			entry.name.Text = if pending > 0 then "DROP" else "empty"
+			entry.swatch.BackgroundColor3 = if pending > 0 then COLOR.accent else COLOR.stroke
+			entry.stroke.Color = if pending > 0 then COLOR.accent else COLOR.stroke
+		elseif basket.state == "cooking" then
+			entry.name.Text = "cooking"        -- countdown filled in per frame
+			entry.swatch.BackgroundColor3 = COLOR.warn
+			entry.stroke.Color = COLOR.stroke
+		elseif basket.state == "ready" then
+			entry.name.Text = "READY"
+			entry.swatch.BackgroundColor3 = COLOR.good
+			entry.stroke.Color = COLOR.good
+		elseif basket.state == "burnt" then
+			entry.name.Text = "BURNT - clear"
+			entry.swatch.BackgroundColor3 = COLOR.bad
+			entry.stroke.Color = COLOR.bad
+		end
+	end
+end
+
 function UI.renderTimers(refs, snapshot)
 	if not snapshot then
 		return
@@ -488,6 +674,26 @@ function UI.renderTimers(refs, snapshot)
 	refs.topBar.timeFill.Size = UDim2.fromScale(
 		math.clamp(remaining / snapshot.shiftDuration, 0, 1), 1
 	)
+
+	-- Basket countdowns tick every frame rather than every snapshot: a fryer
+	-- timer that visibly stutters is worse than no timer at all.
+	if snapshot.activeStation ~= "Fryer" or not snapshot.baskets then
+		return
+	end
+
+	for index, key in FRYER_KEYS do
+		local entry = refs.keyGrid.buttons[key]
+		local basket = snapshot.baskets[index]
+		if entry and basket then
+			if basket.state == "cooking" then
+				entry.name.Text = string.format("%.1fs", math.max(0, basket.readyAt - clock))
+			elseif basket.state == "ready" then
+				-- Counts DOWN to burning, so the number is the danger and not
+				-- the achievement.
+				entry.name.Text = string.format("READY %.1fs", math.max(0, basket.burnAt - clock))
+			end
+		end
+	end
 end
 
 -- ------------------------------------------------------------------ juice --

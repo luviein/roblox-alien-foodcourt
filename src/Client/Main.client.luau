@@ -59,11 +59,29 @@ local function sendAction(payload)
 	Remotes.StationAction:FireServer(payload)
 end
 
+-- The letter keys mean different things at different stations. At Prep they
+-- are ingredients; at the Fryer, Q and W are the two baskets and everything
+-- else is dead. One grid, relabelled per station.
+local FRYER_BASKET_KEYS = { Q = 1, W = 2 }
+
 local function onKey(key: string)
 	if not snapshot or snapshot.state ~= "Service" then
 		return
 	end
+
+	if snapshot.activeStation == "Fryer" then
+		local basket = FRYER_BASKET_KEYS[key]
+		if basket then
+			sendAction({ action = "basket", index = basket })
+		end
+		return
+	end
+
 	sendAction({ action = "ingredient", key = key })
+end
+
+local function onStation(index: number)
+	sendAction({ action = "station", index = index })
 end
 
 local function onServe()
@@ -72,10 +90,6 @@ end
 
 local function onScrap()
 	sendAction({ action = "scrap" })
-end
-
-local function onSelect(slot: number)
-	sendAction({ action = "select", slot = slot })
 end
 
 local function onStart()
@@ -89,7 +103,7 @@ local refs = UI.build(playerGui, {
 	onKey = onKey,
 	onServe = onServe,
 	onScrap = onScrap,
-	onSelect = onSelect,
+	onStation = onStation,
 	onStart = onStart,
 })
 
@@ -110,7 +124,8 @@ local INGREDIENT_KEYS = {
 	[Enum.KeyCode.G] = "G",
 }
 
-local SLOT_KEYS = {
+-- 1-4 now walks to a station rather than picking a ticket.
+local STATION_KEYS = {
 	[Enum.KeyCode.One] = 1,
 	[Enum.KeyCode.Two] = 2,
 	[Enum.KeyCode.Three] = 3,
@@ -144,8 +159,8 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 		onServe()
 	elseif keyCode == Enum.KeyCode.X then
 		onScrap()
-	elseif SLOT_KEYS[keyCode] then
-		onSelect(SLOT_KEYS[keyCode])
+	elseif STATION_KEYS[keyCode] then
+		onStation(STATION_KEYS[keyCode])
 	elseif INGREDIENT_KEYS[keyCode] then
 		onKey(INGREDIENT_KEYS[keyCode])
 	end
@@ -212,7 +227,7 @@ local function handleEvent(event)
 		Audio.play("wrongOrder")
 		comboWasMaxed = false
 
-	elseif kind == "scrapped" or kind == "selected" then
+	elseif kind == "scrapped" then
 		-- Switching tickets abandons the plate, same as scrapping it. Showing
 		-- the food hit the floor makes that cost legible instead of silent.
 		FoodStack.dump()

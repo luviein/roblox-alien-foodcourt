@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
+local StationDefs = require(Shared.StationDefs)
 
 local Kitchen = require(script.Parent.Kitchen)
 
@@ -117,16 +118,29 @@ local function onStationAction(player: Player, payload: any)
 		kitchen:serve()
 	elseif action == "scrap" then
 		kitchen:scrap()
-	elseif action == "select" then
-		local slot = payload.slot
-		if typeof(slot) ~= "number" then
+	elseif action == "station" then
+		local index = payload.index
+		if typeof(index) ~= "number" then
 			return
 		end
-		slot = math.floor(slot)
-		if slot < 1 or slot > Config.MAX_ORDER_SLOTS then
+		index = math.floor(index)
+		if index < 1 or index > #StationDefs.Order then
 			return
 		end
-		kitchen:selectSlot(slot)
+		kitchen:selectStation(index)
+
+	elseif action == "basket" then
+		local index = payload.index
+		if typeof(index) ~= "number" then
+			return
+		end
+		index = math.floor(index)
+		local fryer = StationDefs.get("Fryer")
+		if index < 1 or index > (fryer and fryer.baskets or 0) then
+			return
+		end
+		kitchen:basketAction(index)
+
 	else
 		return
 	end
