@@ -72,6 +72,7 @@ local function pushSnapshot(player: Player)
 			day = profile.day,
 			lastMenu = profile.lastMenu,
 			menuSlots = profile.menuSlots,
+			rebirths = profile.rebirths,
 			conditions = conditionsFor(player),
 			temporary = DataService.isTemporary(player),
 		}
@@ -186,9 +187,15 @@ local function loadoutFor(player: Player, chosen: { string }?)
 		yesterday[dishId] = true
 	end
 
+	-- Every rebirth permanently raises where a neutral menu sits, so a menu
+	-- that was merely adequate before starts pulling a queue.
+	local baseHype = Config.BASE_HYPE
+		+ Config.REBIRTH_HYPE_STEP * ((profile and profile.rebirths) or 0)
+
 	local hypeByPhase = {}
 	for _, phase in HypeDefs.Phases do
-		hypeByPhase[phase] = HypeDefs.evaluate(defs, phase, conditions.weather, yesterday)
+		hypeByPhase[phase] =
+			HypeDefs.evaluate(defs, phase, conditions.weather, yesterday, baseHype)
 	end
 
 	local upgrades = (profile and profile.upgrades) or {}
@@ -200,6 +207,8 @@ local function loadoutFor(player: Player, chosen: { string }?)
 			Config.MAX_ORDER_SLOTS
 		),
 		shiftDuration = Config.SHIFT_DURATION + ShopDefs.valueOf("shift", upgrades.shift or 0),
+		orderPatience = Config.ORDER_PATIENCE
+			+ ShopDefs.valueOf("patience", upgrades.patience or 0),
 		-- Applied to CASH at payout, never to score. Score stays comparable
 		-- between players; what it is worth does not.
 		cashMultiplier = 1 + ShopDefs.valueOf("tips", upgrades.tips or 0),
@@ -366,7 +375,13 @@ local function startTickLoop()
 				-- rather than inside Kitchen keeps the gameplay state machine
 				-- unaware of saving.
 				if before == "Service" and kitchen.state == "Results" then
-					local earned = math.floor(kitchen.score * kitchen.loadout.cashMultiplier + 0.5)
+					-- Score is the skill number and stays big; cash is what that
+					-- skill is worth, and is deliberately a fraction of it.
+					local earned = math.floor(
+						kitchen.score
+							* kitchen.loadout.cashMultiplier
+							* Config.CASH_PER_POINT
+						+ 0.5)
 					kitchen.lastEarned = earned
 					DataService.update(player, function(data)
 						data.cash += earned

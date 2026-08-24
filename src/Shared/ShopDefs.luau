@@ -1,11 +1,16 @@
 --!strict
 -- What cash can be spent on: dishes, and permanent upgrades.
 --
--- The rule every upgrade here follows: RAISE THE CEILING, DO NOT LOWER THE
+-- The rule most upgrades here follow: RAISE THE CEILING, DO NOT LOWER THE
 -- FLOOR. An extra order slot is a good upgrade because it makes you busier and
--- richer at once. "+20% patience" would be a bad one -- it makes the game
--- permanently slower and easier, takes away the pressure people are playing
--- for, and can never be walked back once it is sold.
+-- richer at once, rather than making the game permanently easier.
+--
+-- Counter Service is the deliberate exception, and it is worth being honest
+-- about why. Buying patience DOES lower the floor. It only works because the
+-- base was cut from 22s to 15s first: at 22s every order graded Perfect and
+-- there was no pressure to sell relief from. At 15s there is, and the upgrade
+-- buys back room a new player never had rather than removing difficulty an
+-- experienced one was already handling.
 --
 -- Same reason pets pay cash rather than cook faster: score stays pure skill,
 -- and everything bought or rolled multiplies what that score is worth.
@@ -68,6 +73,19 @@ ShopDefs.Upgrades = {
 		perLevel = 0.04,   -- +4% cash per level
 	},
 
+	patience = {
+		id = "patience",
+		name = "Counter Service",
+		blurb = "Customers wait two seconds longer before giving up.",
+		-- The one upgrade that does lower the floor rather than raise the
+		-- ceiling, which is why the base was cut to fifteen seconds first. It
+		-- buys back room a new player does not have, instead of removing
+		-- pressure they were already handling.
+		levels = { 1000, 2600, 6000 },
+		baseValue = 0,
+		perLevel = 2,
+	},
+
 	shift = {
 		id = "shift",
 		name = "Longer Licence",
@@ -80,7 +98,7 @@ ShopDefs.Upgrades = {
 	},
 }
 
-ShopDefs.UpgradeOrder = { "slots", "tips", "shift" }
+ShopDefs.UpgradeOrder = { "slots", "patience", "tips", "shift" }
 
 -- ------------------------------------------------------------------ query --
 

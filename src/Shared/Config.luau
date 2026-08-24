@@ -7,12 +7,15 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "draft-30"
+Config.BUILD = "tune-31"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
 Config.SHIFT_DURATION = 90
-Config.ORDER_PATIENCE = 22         -- seconds before a customer walks out
+-- Base seconds before a customer walks out. Deliberately tight: at 22s every
+-- order graded Perfect, so the combo never broke and the multiplier sat on its
+-- ceiling for the back half of the shift. Counter Service upgrades raise this.
+Config.ORDER_PATIENCE = 15
 Config.MAX_ORDER_SLOTS = 4         -- hard cap on tickets on screen
 
 -- Difficulty curve. Each entry is {progress 0-1, value}. The value used is
@@ -59,6 +62,18 @@ Config.GRADE_MULT = {
 
 Config.COMBO_STEP = 0.10           -- +10% per combo step
 Config.COMBO_MAX = 3.0             -- multiplier ceiling
+
+-- Score is skill; cash is what that skill is worth, and the two are separate
+-- so difficulty and economy can be tuned without dragging each other around.
+-- Keeping the score number big and the cash number small is deliberate: the
+-- shift should feel good to finish and the unlock should still feel earned.
+Config.CASH_PER_POINT = 0.30
+
+-- ---------------------------------------------------------------- hype -----
+-- Where a neutral menu sits before any tag is counted. Not 1.0: the station
+-- has a baseline reputation, and rebirths raise it permanently.
+Config.BASE_HYPE = 1.15
+Config.REBIRTH_HYPE_STEP = 0.05
 
 -- ---------------------------------------------------------------- input ----
 -- "reject"  : a wrong key is refused outright with a short fumble lockout.

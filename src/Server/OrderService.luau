@@ -73,7 +73,8 @@ function OrderService.draw(bag: Bag): string
 end
 
 -- Builds a concrete ticket: rolls which optional components this customer wants.
-function OrderService.create(bag: Bag, orderId: number, now: number): Order
+function OrderService.create(bag: Bag, orderId: number, now: number, patience: number?): Order
+	patience = patience or Config.ORDER_PATIENCE
 	local dishId = OrderService.draw(bag)
 	local dish = DishDefs.get(dishId)
 	assert(dish, `unknown dish "{dishId}" in ActiveMenu`)
@@ -108,7 +109,7 @@ function OrderService.create(bag: Bag, orderId: number, now: number): Order
 		required = required,
 		keys = keys,
 		createdAt = now,
-		expiresAt = now + Config.ORDER_PATIENCE,
+			expiresAt = now + patience,
 		baseValue = dish.baseValue,
 		timing = dish.timing,
 	}

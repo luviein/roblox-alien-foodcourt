@@ -15,6 +15,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local DishDefs = require(Shared.DishDefs)
 local HypeDefs = require(Shared.HypeDefs)
 local ShopDefs = require(Shared.ShopDefs)
+local Config = require(Shared.Config)
 
 local DraftUI = {}
 
@@ -182,13 +183,13 @@ local function buildPhaseRow(parent: Instance, order: number, phase: string)
 	}, row)
 	corner(track, 4)
 
-	-- The 100% mark, so above and below the line are visible at a glance
-	-- rather than requiring you to read the number.
-	make("Frame", {
+	-- Marks where a neutral menu would sit, so above and below the line read at
+	-- a glance without parsing the number. Positioned at render rather than
+	-- here, because rebirths move it.
+	local tick = make("Frame", {
 		BackgroundColor3 = COLOR.stroke,
 		BorderSizePixel = 0,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale((1 - HypeDefs.MIN) / (HypeDefs.MAX - HypeDefs.MIN), 0),
 		Size = UDim2.new(0, 2, 1, 0),
 		ZIndex = 3,
 	}, track)
@@ -200,7 +201,7 @@ local function buildPhaseRow(parent: Instance, order: number, phase: string)
 	}, track)
 	corner(fill, 4)
 
-	return { frame = row, readout = readout, fill = fill }
+	return { frame = row, readout = readout, fill = fill, tick = tick }
 end
 
 function DraftUI.build(playerGui: Instance, onConfirm: ({ string }) -> ())
@@ -544,19 +545,27 @@ function DraftUI.render(refs, profile)
 		end
 	end
 
+	-- Where a neutral menu sits for this player. Rebirths raise it, so the bar
+	-- is drawn against their own baseline rather than a fixed 100%.
+	local base = Config.BASE_HYPE
+		+ Config.REBIRTH_HYPE_STEP * (profile.rebirths or 0)
+	local lo = math.max(base - HypeDefs.SWING_DOWN, HypeDefs.MIN)
+	local hi = math.min(base + HypeDefs.SWING_UP, HypeDefs.MAX)
+
 	local allReasons = {}
 	for _, phase in HypeDefs.Phases do
-		local hype, why = HypeDefs.evaluate(defs, phase, conditions.weather or "clear", yesterday)
+		local hype, why =
+			HypeDefs.evaluate(defs, phase, conditions.weather or "clear", yesterday, base)
 		local row = refs.phaseRows[phase]
 
 		row.readout.Text = string.format("%d%%", math.round(hype * 100))
-		row.readout.TextColor3 = if hype > 1.02 then COLOR.good
-			elseif hype < 0.98 then COLOR.bad
+		row.readout.TextColor3 = if hype > base + 0.01 then COLOR.good
+			elseif hype < base - 0.01 then COLOR.bad
 			else COLOR.text
-		row.fill.Size = UDim2.fromScale(
-			(hype - HypeDefs.MIN) / (HypeDefs.MAX - HypeDefs.MIN), 1)
-		row.fill.BackgroundColor3 = if hype > 1.02 then COLOR.good
-			elseif hype < 0.98 then COLOR.bad
+		row.tick.Position = UDim2.fromScale((base - lo) / (hi - lo), 0)
+		row.fill.Size = UDim2.fromScale((hype - lo) / (hi - lo), 1)
+		row.fill.BackgroundColor3 = if hype > base + 0.01 then COLOR.good
+			elseif hype < base - 0.01 then COLOR.bad
 			else COLOR.accent
 
 		for _, reason in why do

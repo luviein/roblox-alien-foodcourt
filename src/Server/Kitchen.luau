@@ -179,7 +179,8 @@ function Kitchen:validateSelection()
 end
 
 function Kitchen:spawnOrder()
-	local order = OrderService.create(self.bag, self.nextOrderId, now())
+	local order = OrderService.create(
+		self.bag, self.nextOrderId, now(), self.loadout.orderPatience)
 	self.nextOrderId += 1
 	table.insert(self.orders, order)
 	self:emit({ type = "orderArrived", orderId = order.id, dishId = order.dishId })

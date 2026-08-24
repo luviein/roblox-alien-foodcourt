@@ -12,6 +12,8 @@
 -- and then stops, so the question is what shape your menu has across the whole
 -- day rather than what its average is.
 
+local Config = require(script.Parent.Config)
+
 local HypeDefs = {}
 
 -- One shift is one day, in three equal parts.
@@ -37,10 +39,18 @@ HypeDefs.WeatherDeck = {
 -- run away with a draft.
 HypeDefs.STEP = 0.05
 
+-- How far a menu can swing hype either side of the base. Relative rather than
+-- absolute so that a rebirth raising the base actually raises what a good menu
+-- can reach -- a fixed ceiling would quietly eat the reward.
+--
 -- Below the floor there is nothing to do; above the ceiling more customers
 -- arrive than anyone can physically serve, which is not difficulty, just loss.
+HypeDefs.SWING_DOWN = 0.40
+HypeDefs.SWING_UP = 0.35
+
+-- Absolute limits on the drawn bar, kept wide enough to hold a few rebirths.
 HypeDefs.MIN = 0.60
-HypeDefs.MAX = 1.50
+HypeDefs.MAX = 2.00
 
 HypeDefs.HEALTHY_PAIR = 2   -- this many healthy dishes gives the bonus
 HypeDefs.FATTY_LIMIT = 3    -- this many fatty dishes starts costing you
@@ -81,8 +91,11 @@ end
 -- draft screen can show its working rather than just a number.
 --
 -- `menu` is dish definitions, `yesterday` a set of dish ids served last shift.
-function HypeDefs.evaluate(menu, phase: string, weatherId: string, yesterday): (number, { string })
-	local hype = 1.0
+-- `base` is where a neutral menu sits: Config.BASE_HYPE plus whatever rebirths
+-- have added. Tags move hype relative to it.
+function HypeDefs.evaluate(menu, phase: string, weatherId: string, yesterday, base: number?): (number, { string })
+	local origin = base or Config.BASE_HYPE
+	local hype = origin
 	local reasons = {}
 
 	local healthy, fatty = 0, 0
@@ -146,7 +159,11 @@ function HypeDefs.evaluate(menu, phase: string, weatherId: string, yesterday): (
 		table.insert(reasons, ("-%d%% too much fried food"):format(HypeDefs.STEP * 100))
 	end
 
-	return math.clamp(hype, HypeDefs.MIN, HypeDefs.MAX), reasons
+	return math.clamp(
+		hype,
+		math.max(origin - HypeDefs.SWING_DOWN, HypeDefs.MIN),
+		math.min(origin + HypeDefs.SWING_UP, HypeDefs.MAX)
+	), reasons
 end
 
 -- How many menu dishes carry each chore-provoking tag, for ChoreDefs.roll.
