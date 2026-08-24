@@ -18,16 +18,31 @@ local ShopDefs = {}
 -- ahead of the cheaper assembly dishes. The first half of the curve should pay
 -- out in new things to do, not in more of the same thing.
 ShopDefs.DishOrder = {
-	"fries", "hotdog", "steak", "taco", "onion_rings", "pancakes",
+	"fries", "hotdog", "steak", "grilled_cheese", "taco",
+	"onion_rings", "pancakes", "club_sandwich", "breakfast_burrito",
+	"tempura_veg", "ramen", "gloom_spuds", "quivvern_flank",
+	"six_yolk_omelette",
 }
 
 ShopDefs.DishCost = {
-	fries       = 300,     -- unlocks the fryer
-	hotdog      = 700,
-	steak       = 1500,    -- unlocks the grill
-	taco        = 2600,
-	onion_rings = 4200,
-	pancakes    = 6500,
+	fries             = 400,     -- unlocks the fryer
+	hotdog            = 900,
+	steak             = 1500,    -- unlocks the grill
+	grilled_cheese    = 2600,
+	taco              = 4000,
+	onion_rings       = 6000,
+	pancakes          = 8500,
+	club_sandwich     = 11000,
+	breakfast_burrito = 14000,
+	tempura_veg       = 18000,
+
+	-- Cooked with what the station has rather than what Earth sent. These are
+	-- harder as well as dearer: a reward that is only a bigger number stops
+	-- being interesting the moment you own it.
+	ramen             = 23000,
+	gloom_spuds       = 29000,
+	quivvern_flank    = 37000,
+	six_yolk_omelette = 47000,
 }
 
 -- Permanent upgrades. `levels` is a list of costs; buying level N costs

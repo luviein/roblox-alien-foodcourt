@@ -400,8 +400,16 @@ function Kitchen:startCook(order): boolean
 	end
 
 	local t = now()
+
+	-- Some things do not cook the same way twice. Jitter means there is no
+	-- rhythm to memorise, so you have to watch the ticket rather than count.
+	local cookTime = fry.cookTime
+	if fry.jitter then
+		cookTime += self.bag.rng:NextNumber(-fry.jitter, fry.jitter)
+	end
+
 	order.cookState = "cooking"
-	order.readyAt = t + fry.cookTime
+	order.readyAt = t + cookTime
 	order.burnAt = order.readyAt + fry.burn
 
 	self:emit({

@@ -74,6 +74,61 @@ DishDefs.Ingredients = {
 	basket_shake = { name = "Shake Basket", color = Color3.fromRGB(168, 174, 192) },
 	basket_lower = { name = "Lower Basket", color = Color3.fromRGB(232, 148, 62) },
 
+	bread_slice = {
+		name = "Bread", color = Color3.fromRGB(226, 200, 152),
+		visual = { shape = "block", size = Vector3.new(2.4, 0.22, 2.4), rise = 0.22, tilt = 3 },
+	},
+	bread_top = {
+		name = "Top Slice", color = Color3.fromRGB(232, 208, 164),
+		visual = { shape = "block", size = Vector3.new(2.4, 0.22, 2.4), rise = 0.22, tilt = 3 },
+	},
+	turkey = {
+		name = "Turkey", color = Color3.fromRGB(216, 176, 140),
+		visual = { shape = "block", size = Vector3.new(2.2, 0.16, 2.2), rise = 0.18, tilt = 5 },
+	},
+	tomato = {
+		name = "Tomato", color = Color3.fromRGB(214, 66, 54),
+		visual = { shape = "cylinder", size = Vector3.new(1.9, 0.14, 1.9), rise = 0.14, tilt = 6 },
+	},
+	egg = {
+		name = "Egg", color = Color3.fromRGB(248, 238, 206),
+		visual = { shape = "dome", size = Vector3.new(1.8, 0.5, 1.8), rise = 0.3, tilt = 0 },
+	},
+
+	-- Ramen, bottom to top.
+	broth = {
+		name = "Broth", color = Color3.fromRGB(186, 142, 74),
+		visual = { shape = "cylinder", size = Vector3.new(2.8, 0.5, 2.8), rise = 0.5, tilt = 0 },
+	},
+	noodles = {
+		name = "Noodles", color = Color3.fromRGB(238, 216, 150),
+		visual = { shape = "cylinder", size = Vector3.new(2.5, 0.35, 2.5), rise = 0.3, tilt = 3 },
+	},
+	pork_slice = {
+		name = "Pork", color = Color3.fromRGB(206, 148, 132),
+		visual = { shape = "block", size = Vector3.new(1.9, 0.14, 1.9), rise = 0.15, tilt = 8 },
+	},
+	scallion = {
+		name = "Scallion", color = Color3.fromRGB(128, 200, 104),
+		visual = { shape = "cylinder", size = Vector3.new(1.6, 0.1, 1.6), rise = 0.1, tilt = 10 },
+	},
+	nori = {
+		name = "Nori", color = Color3.fromRGB(42, 62, 52),
+		visual = { shape = "block", size = Vector3.new(1.5, 0.06, 1.5), rise = 0.1, tilt = 14 },
+	},
+
+	-- Station-sourced, not Earth-sourced. By the time you can afford these you
+	-- have been up here long enough to start cooking with what is actually
+	-- around you.
+	quivvern_raw = {
+		name = "Quivvern Flank", color = Color3.fromRGB(122, 84, 168),
+		visual = { shape = "cylinder", size = Vector3.new(2.4, 0.44, 2.0), rise = 0.44, tilt = 5 },
+	},
+	alien_eggs = {
+		name = "Six Yolks", color = Color3.fromRGB(196, 226, 148),
+		visual = { shape = "dome", size = Vector3.new(2.3, 0.6, 2.3), rise = 0.36, tilt = 0 },
+	},
+
 	steak_raw = {
 		name = "Raw Steak", color = Color3.fromRGB(150, 72, 72),
 		visual = { shape = "cylinder", size = Vector3.new(2.5, 0.5, 2.0), rise = 0.5, tilt = 4 },
@@ -262,13 +317,191 @@ DishDefs.Dishes = {
 		tags = { "Hot", "Sweet" },
 		workload = { dishLoad = 2, trashLoad = 1, greaseLoad = 1, messRisk = 1, prepTime = 2 },
 	},
+
+	club_sandwich = {
+		id = "club_sandwich",
+		displayName = "Club Sandwich",
+		alienName = "the tower of pale layers",
+		station = "Prep",
+		archetype = "Assembly",
+		baseValue = 52,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "bread_slice", required = true },
+			{ key = "A", id = "turkey",      required = true },
+			{ key = "S", id = "cheese",      required = false },
+			{ key = "D", id = "lettuce",     required = false },
+			{ key = "F", id = "tomato",      required = false },
+			{ key = "W", id = "bread_top",   required = true },
+		},
+		hype = { healthy = true, dishes = true },
+		tags = { "Fresh", "Light" },
+		workload = { dishLoad = 2, trashLoad = 1, greaseLoad = 0, messRisk = 1, prepTime = 2 },
+	},
+
+	breakfast_burrito = {
+		id = "breakfast_burrito",
+		displayName = "Breakfast Burrito",
+		alienName = "the morning bundle",
+		station = "Prep",
+		archetype = "Assembly",
+		baseValue = 48,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "tortilla", required = true },
+			{ key = "A", id = "egg",      required = true },
+			{ key = "S", id = "sausage",  required = false },
+			{ key = "D", id = "cheese",   required = false },
+			{ key = "F", id = "salsa",    required = false },
+		},
+		hype = { breakfast = true, fatty = true, trash = true },
+		tags = { "Hot", "Savory" },
+		workload = { dishLoad = 1, trashLoad = 2, greaseLoad = 2, messRisk = 1, prepTime = 2 },
+	},
+
+	-- Six steps in strict order: the longest build in the game, and the one
+	-- that punishes you hardest for trying to do it while something burns.
+	ramen = {
+		id = "ramen",
+		displayName = "Ramen",
+		alienName = "the hot pond with strings",
+		station = "Prep",
+		archetype = "Assembly",
+		baseValue = 62,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "broth",      required = true },
+			{ key = "A", id = "noodles",    required = true },
+			{ key = "S", id = "pork_slice", required = true },
+			{ key = "D", id = "egg",        required = false },
+			{ key = "F", id = "scallion",   required = false },
+			{ key = "W", id = "nori",       required = true },
+		},
+		hype = { healthy = true, dishes = true, weather = "cold" },
+		tags = { "Hot", "Savory" },
+		workload = { dishLoad = 3, trashLoad = 1, greaseLoad = 0, messRisk = 2, prepTime = 3 },
+	},
+
+	tempura_veg = {
+		id = "tempura_veg",
+		displayName = "Tempura Veg",
+		alienName = "the crisped garden",
+		station = "Fryer",
+		archetype = "Fry",
+		baseValue = 44,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "basket_load",  required = true },
+			{ key = "W", id = "basket_lower", required = true },
+		},
+		fry = { cookTime = 3.5, perfect = 1.4, good = 2.8, burn = 5.5 },
+		-- Fried but not fatty: the escape hatch from the three-fatty penalty,
+		-- which is exactly why it costs what it costs.
+		hype = { healthy = true, dishes = true, weather = "sunny" },
+		tags = { "Hot", "Fried", "Fresh" },
+		workload = { dishLoad = 2, trashLoad = 1, greaseLoad = 2, messRisk = 1, prepTime = 1 },
+	},
+
+	gloom_spuds = {
+		id = "gloom_spuds",
+		displayName = "Gloom-Spud Fritters",
+		alienName = "the sulking roots",
+		station = "Fryer",
+		archetype = "Fry",
+		baseValue = 70,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "basket_load",  required = true },
+			{ key = "W", id = "basket_lower", required = true },
+		},
+		-- Cook time wanders by up to a second either way, so there is no rhythm
+		-- to memorise. You have to actually watch the ticket.
+		fry = { cookTime = 4, jitter = 1, perfect = 1.2, good = 2.4, burn = 4.5 },
+		hype = { fatty = true, trash = true, smelly = true },
+		tags = { "Hot", "Fried", "Greasy" },
+		workload = { dishLoad = 1, trashLoad = 3, greaseLoad = 3, messRisk = 2, prepTime = 1 },
+	},
+
+	grilled_cheese = {
+		id = "grilled_cheese",
+		displayName = "Grilled Cheese",
+		alienName = "the melted brick",
+		station = "Grill",
+		archetype = "Sear",
+		baseValue = 34,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "bread_slice", required = true },
+			{ key = "A", id = "cheese",      required = true },
+		},
+		sear = {
+			key = "W",
+			label = "GRILL (hold)",
+			duration = 2.8,
+			perfectFrom = 0.60, perfectTo = 0.86,
+			goodFrom = 0.40, goodTo = 0.96,
+		},
+		hype = { fatty = true, dishes = true, weather = "cold" },
+		tags = { "Hot", "Savory" },
+		workload = { dishLoad = 2, trashLoad = 1, greaseLoad = 2, messRisk = 1, prepTime = 1 },
+	},
+
+	quivvern_flank = {
+		id = "quivvern_flank",
+		displayName = "Quivvern Flank",
+		alienName = "the local cut",
+		station = "Grill",
+		archetype = "Sear",
+		baseValue = 78,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "quivvern_raw", required = true },
+		},
+		-- Sears in roughly half the time of a steak through a band half as
+		-- wide. The best paying thing on the board and the easiest to ruin.
+		sear = {
+			key = "W",
+			label = "SEAR (hold)",
+			duration = 1.8,
+			perfectFrom = 0.66, perfectTo = 0.80,
+			goodFrom = 0.52, goodTo = 0.92,
+		},
+		hype = { healthy = true, dishes = true, weather = "cold" },
+		tags = { "Hot", "Savory" },
+		workload = { dishLoad = 2, trashLoad = 1, greaseLoad = 2, messRisk = 2, prepTime = 2 },
+	},
+
+	six_yolk_omelette = {
+		id = "six_yolk_omelette",
+		displayName = "Six-Yolk Omelette",
+		alienName = "the sunrise, sixfold",
+		station = "Grill",
+		archetype = "Sear",
+		baseValue = 68,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "alien_eggs", required = true },
+		},
+		-- The narrowest band in the game.
+		sear = {
+			key = "W",
+			label = "SET (hold)",
+			duration = 2.2,
+			perfectFrom = 0.70, perfectTo = 0.80,
+			goodFrom = 0.56, goodTo = 0.90,
+		},
+		hype = { breakfast = true, healthy = true, dishes = true },
+		tags = { "Hot", "Sweet" },
+		workload = { dishLoad = 2, trashLoad = 1, greaseLoad = 1, messRisk = 1, prepTime = 2 },
+	},
 }
 
 -- What can show up on tickets. Later this becomes the player's drafted menu.
 DishDefs.ActiveMenu = {
-	"burger", "hotdog", "taco",
-	"fries", "onion_rings",
-	"steak", "pancakes",
+	"burger", "fries", "hotdog", "steak", "grilled_cheese",
+	"taco", "onion_rings", "pancakes", "club_sandwich",
+	"breakfast_burrito", "tempura_veg", "ramen",
+	"gloom_spuds", "quivvern_flank", "six_yolk_omelette",
 }
 
 function DishDefs.stationOf(dishId: string): string?
