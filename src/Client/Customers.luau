@@ -287,11 +287,39 @@ local function buildRigCustomer(parent: Instance)
 	-- somehow arrives with it on will silently ignore every pose we write.
 	humanoid.AutomaticScalingEnabled = false
 
-	-- Ask explicitly rather than trusting parenting to have done it. Harmless
-	-- if the joints already exist; not available on R6, hence the pcall.
-	pcall(function()
+	-- Ask explicitly rather than trusting parenting to have done it. Capture
+	-- the failure instead of swallowing it -- a silently-refused rig build is
+	-- exactly the kind of thing that has been costing rounds here.
+	local buildOk, buildErr = pcall(function()
 		humanoid:BuildRigFromAttachments()
 	end)
+
+	-- What is this model actually made of? Every theory so far has been about
+	-- animation when the real answer was about identity.
+	local census = { Motor6D = 0, Weld = 0, WeldConstraint = 0, Attachment = 0, BasePart = 0 }
+	for _, descendant in model:GetDescendants() do
+		for class in census do
+			if descendant:IsA(class) then
+				census[class] += 1
+			end
+		end
+	end
+
+	local childNames = {}
+	for _, child in model:GetChildren() do
+		table.insert(childNames, child.Name)
+		if #childNames >= 12 then
+			break
+		end
+	end
+
+	local diagnostic = ("rigType=%s buildRig=%s | parts=%d motor6d=%d weld=%d weldcon=%d attach=%d\nchildren: %s")
+		:format(
+			humanoid.RigType.Name,
+			if buildOk then "ok" else ("FAILED: " .. tostring(buildErr)),
+			census.BasePart, census.Motor6D, census.Weld, census.WeldConstraint, census.Attachment,
+			table.concat(childNames, ", ")
+		)
 
 	-- true: catalog rigs arrive T-posed and need the rest offset applied.
 	local rig, jointNames = NpcAnimator.bind(model, true)
@@ -338,6 +366,7 @@ local function buildRigCustomer(parent: Instance)
 		rig = rig,
 		jointNames = jointNames,
 		face = drawnFace,
+		diagnostic = diagnostic,
 	}
 
 	-- Safety net: if the rig assembles a frame late, pick the joints up then
@@ -396,14 +425,15 @@ local reportedFirst = false
 -- screenshot carries the answer where a scrolled-past Output line does not.
 -- Set DEBUG_BODY to false once the rig pipeline is settled.
 local function reportBody(body)
-	local text = ("kind=%s | joints=%s | face=%s | head=%s\nMotor6Ds: %s"):format(
+	local text = ("kind=%s | joints=%s | face=%s | head=%s\nMotor6Ds: %s\n%s"):format(
 		body.kind,
 		if body.rig then "BOUND" else "MISSING",
 		if body.face then "drawn" else "MISSING",
 		if body.adornee then body.adornee.Name else "none",
 		if body.jointNames and #body.jointNames > 0
 			then table.concat(body.jointNames, ", ")
-			else "none found"
+			else "none found",
+		tostring(body.diagnostic)
 	)
 
 	print("[AlienFoodCourt] customer body: " .. text)
@@ -425,7 +455,7 @@ local function reportBody(body)
 		BackgroundTransparency = 0.15,
 		BorderSizePixel = 0,
 		Position = UDim2.fromScale(0.005, 0.12),
-		Size = UDim2.fromScale(0.5, 0.07),
+		Size = UDim2.fromScale(0.62, 0.16),
 		Font = Enum.Font.Code,
 		Text = text,
 		TextColor3 = if body.rig then Color3.fromRGB(120, 230, 150) else Color3.fromRGB(255, 120, 110),
