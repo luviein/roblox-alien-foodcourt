@@ -122,6 +122,10 @@ local function loadoutFor(player: Player)
 		-- Applied to CASH at payout, never to score. Score stays comparable
 		-- between players; what it is worth does not.
 		cashMultiplier = 1 + ShopDefs.valueOf("tips", upgrades.tips or 0),
+
+		-- How many menu dishes carry each chore-provoking tag. Empty until the
+		-- menu draft exists; ChoreDefs falls back to flat odds.
+		tagCounts = {},
 	}
 end
 
@@ -231,6 +235,9 @@ local function onStationAction(player: Player, payload: any)
 		end)
 
 		DataService.save(player)
+
+	elseif action == "chore" then
+		kitchen:clearChore()
 
 	elseif action == "searStart" then
 		kitchen:searStart()

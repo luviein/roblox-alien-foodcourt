@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "P2b-shop-24"
+Config.BUILD = "chores-25"
 
 -- ---------------------------------------------------------------- shift ----
 Config.SHIFT_DURATION = 180        -- seconds of service per round
@@ -33,6 +33,15 @@ Config.SPAWN_INTERVAL = {
 -- Grade boundaries as a fraction of the customer's remaining patience.
 -- These are also the colour stops on the patience bar, deliberately: the bar
 -- is the grade meter, so serving while it is green is a Perfect.
+-- Chores interrupt on their own schedule during service. The gap is randomised
+-- inside this range so they never become something you can plan around.
+Config.CHORE_GAP = { 18, 34 }
+
+-- What failing one costs. Halving is deliberate: a full reset for missing a
+-- five second window would make chores the whole game, and a flat -1 would
+-- make them free once a streak is long.
+Config.CHORE_COMBO_PENALTY = 0.5
+
 Config.GRADE_PATIENCE = {
 	perfect = 0.55,
 	good = 0.30,

@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local ChoreDefs = require(Shared.ChoreDefs)
 local DishDefs = require(Shared.DishDefs)
 
 local OrderService = require(script.Parent.OrderService)
@@ -32,6 +33,12 @@ local function curveValue(curve, progress: number): number
 		end
 	end
 	return result
+end
+
+-- Seconds until the next interruption. Randomised so chores never become
+-- something you can count down to and pre-empt.
+local function choreGap(rng: Random): number
+	return rng:NextNumber(Config.CHORE_GAP[1], Config.CHORE_GAP[2])
 end
 
 function Kitchen.new(participants: { Player })
@@ -59,6 +66,8 @@ function Kitchen.new(participants: { Player })
 	self.shiftEndsAt = 0
 	self.nextSpawnAt = 0
 	self.fumbleUntil = 0
+	self.chore = nil
+	self.nextChoreAt = 0
 
 	self.events = {}  -- drained by ShiftService each tick
 
@@ -112,6 +121,9 @@ function Kitchen:startShift(loadout)
 	self.shiftStartedAt = t
 	self.shiftEndsAt = t + loadout.shiftDuration
 	self.nextSpawnAt = t + 1.0   -- brief beat before the first ticket
+	-- Nothing interrupts in the opening moments; let them get going first.
+	self.chore = nil
+	self.nextChoreAt = t + choreGap(self.bag.rng) * 0.6
 	self.fumbleUntil = 0
 
 	self:emit({ type = "shiftStarted" })
@@ -488,6 +500,35 @@ function Kitchen:searEnd()
 	})
 end
 
+-- ---------------------------------------------------------------- chores ---
+
+function Kitchen:spawnChore()
+	local chore = ChoreDefs.roll(self.bag.rng, self.loadout.tagCounts)
+	local t = now()
+
+	self.chore = {
+		id = chore.id,
+		startedAt = t,
+		expiresAt = t + chore.duration,
+	}
+
+	self:emit({ type = "choreStarted", choreId = chore.id, expiresAt = self.chore.expiresAt })
+end
+
+-- One key clears whatever is up. Deliberately not per-chore: every letter key
+-- may be an ingredient for the dish in your hands.
+function Kitchen:clearChore()
+	if self.state ~= "Service" or not self.chore then
+		return
+	end
+
+	local choreId = self.chore.id
+	self.chore = nil
+	self.nextChoreAt = now() + choreGap(self.bag.rng)
+
+	self:emit({ type = "choreCleared", choreId = choreId })
+end
+
 -- ----------------------------------------------------------------- tick ----
 
 function Kitchen:tick()
@@ -496,6 +537,29 @@ function Kitchen:tick()
 	end
 
 	local t = now()
+
+	-- Chores. One at a time: two competing five second timers is not pressure,
+	-- it is a mess.
+	if self.chore then
+		if t >= self.chore.expiresAt then
+			local choreId = self.chore.id
+			self.chore = nil
+			self.nextChoreAt = t + choreGap(self.bag.rng)
+
+			-- Halved, not reset. A missed five second window should hurt without
+			-- erasing a minute of clean work.
+			local before = self.combo
+			self.combo = math.floor(self.combo * Config.CHORE_COMBO_PENALTY)
+			self:emit({
+				type = "choreFailed",
+				choreId = choreId,
+				comboBefore = before,
+				combo = self.combo,
+			})
+		end
+	elseif t >= self.nextChoreAt then
+		self:spawnChore()
+	end
 
 	-- Anything left on the grill burns. Unlike the fryer this cannot be left
 	-- and returned to: it is ruined a couple of seconds after it is done.
@@ -596,6 +660,7 @@ function Kitchen:snapshot()
 		activeOrderId = self.activeOrderId,
 		build = self.build,
 		fumbleUntil = self.fumbleUntil,
+		chore = self.chore,
 		orders = orders,
 		stats = self.stats,
 	}

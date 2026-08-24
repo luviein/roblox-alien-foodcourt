@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local ChoreDefs = require(Shared.ChoreDefs)
 local DishDefs = require(Shared.DishDefs)
 
 local UI = {}
@@ -441,6 +442,78 @@ local function buildOverlay(parent: Instance, onStart: () -> ())
 	}
 end
 
+-- The interrupt. Deliberately loud and deliberately in the middle of the
+-- screen: a chore you can politely ignore is not an interruption, it is
+-- decoration.
+local function buildChoreBanner(parent: Instance, onClear: () -> ())
+	local banner = make("TextButton", {
+		Name = "Chore",
+		BackgroundColor3 = COLOR.bad,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0.115),
+		Size = UDim2.fromScale(0.34, 0.1),
+		Visible = false,
+		ZIndex = 8,
+	}, parent)
+	corner(banner, 10)
+
+	local title = make("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.04, 0.08),
+		Size = UDim2.fromScale(0.92, 0.44),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.bg,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 9,
+	}, banner)
+	make("UITextSizeConstraint", { MaxTextSize = 20 }, title)
+
+	local prompt = make("TextLabel", {
+		Name = "Prompt",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.04, 0.5),
+		Size = UDim2.fromScale(0.92, 0.28),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.bg,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 9,
+	}, banner)
+	make("UITextSizeConstraint", { MaxTextSize = 14 }, prompt)
+
+	local track = make("Frame", {
+		Name = "Track",
+		BackgroundColor3 = COLOR.bg,
+		BackgroundTransparency = 0.5,
+		BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.fromScale(0.5, 0.94),
+		Size = UDim2.fromScale(0.92, 0.1),
+		ZIndex = 9,
+	}, banner)
+	corner(track, 3)
+
+	local fill = make("Frame", {
+		Name = "Fill",
+		BackgroundColor3 = COLOR.bg,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 10,
+	}, track)
+	corner(fill, 3)
+
+	banner.Activated:Connect(onClear)
+
+	return { frame = banner, title = title, prompt = prompt, fill = fill }
+end
+
 local function buildFlash(parent: Instance)
 	local flash = make("TextLabel", {
 		Name = "Flash",
@@ -535,6 +608,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		keyGrid = buildKeyGrid(prep, callbacks.onKey),
 		actionBar = buildActionBar(prep, callbacks.onServe, callbacks.onScrap),
 		overlay = overlay,
+		chore = buildChoreBanner(root, callbacks.onChore),
 		flash = buildFlash(root),
 	}
 end
@@ -598,6 +672,16 @@ function UI.render(refs, snapshot)
 			activeOrder = order
 			break
 		end
+	end
+
+	-- Chores sit above everything else. They are the only thing in the game
+	-- with its own clock that you did not start.
+	local chore = snapshot.chore
+	refs.chore.frame.Visible = chore ~= nil and state == "Service"
+	if chore then
+		local def = ChoreDefs.get(chore.id)
+		refs.chore.title.Text = string.upper(def and def.name or chore.id)
+		refs.chore.prompt.Text = ("press %s   %s"):format(ChoreDefs.KEY, def and def.blurb or "")
 	end
 
 	-- The prep panel is only up while you actually have an order in hand. A
@@ -746,6 +830,14 @@ function UI.renderTimers(refs, snapshot)
 
 	local clock = workspace:GetServerTimeNow()
 	local remaining = math.max(0, snapshot.shiftEndsAt - clock)
+
+	-- The chore bar drains per frame. Five seconds is short enough that a
+	-- ten-times-a-second bar would visibly stutter through it.
+	if snapshot.chore then
+		local span = math.max(snapshot.chore.expiresAt - snapshot.chore.startedAt, 0.001)
+		local left = math.clamp((snapshot.chore.expiresAt - clock) / span, 0, 1)
+		refs.chore.fill.Size = UDim2.fromScale(left, 1)
+	end
 
 	refs.topBar.time.Text = formatTime(remaining)
 	refs.topBar.timeFill.Size = UDim2.fromScale(

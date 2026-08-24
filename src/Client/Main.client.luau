@@ -107,6 +107,9 @@ local refs = UI.build(playerGui, {
 	onScrap = onScrap,
 	onSelect = onSelect,
 	onStart = onStart,
+	onChore = function()
+		sendAction({ action = "chore" })
+	end,
 	onOpenShop = function()
 		ShopUI.setOpen(shop, true)
 	end,
@@ -204,7 +207,11 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 		return Enum.ContextActionResult.Sink
 	end
 
-	if keyCode == Enum.KeyCode.Space then
+	if keyCode == Enum.KeyCode.C then
+		-- Clears whatever chore is up. Its own key so it never collides with an
+		-- ingredient on whatever dish happens to be in hand.
+		sendAction({ action = "chore" })
+	elseif keyCode == Enum.KeyCode.Space then
 		onServe()
 	elseif keyCode == Enum.KeyCode.X then
 		onScrap()
@@ -221,7 +228,7 @@ local BOUND_KEYS = {
 	Enum.KeyCode.Q, Enum.KeyCode.W, Enum.KeyCode.E, Enum.KeyCode.R, Enum.KeyCode.T,
 	Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.F, Enum.KeyCode.G,
 	Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,
-	Enum.KeyCode.Space, Enum.KeyCode.X,
+	Enum.KeyCode.Space, Enum.KeyCode.X, Enum.KeyCode.C,
 }
 
 -- Sinking Space also stops the character jumping under the UI, which is what
@@ -287,6 +294,12 @@ local function handleEvent(event)
 
 	elseif kind == "searStarted" then
 		Audio.play("sizzle")
+
+	elseif kind == "choreFailed" then
+		UI.flash(refs, "CHORE MISSED", UI.COLOR.bad)
+		Audio.play("wrongOrder")
+		Scene.shake(0.2, 0.2)
+		comboWasMaxed = false
 
 	elseif kind == "orderArrived" then
 		Audio.play("ticketArrive")
