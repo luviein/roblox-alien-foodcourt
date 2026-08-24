@@ -389,7 +389,7 @@ local function buildOverlay(parent: Instance, onStart: () -> ())
 		AnchorPoint = Vector2.new(0.5, 0),
 		Size = UDim2.fromScale(0.26, 0.085),
 		Font = Enum.Font.GothamBold,
-		Text = "START SHIFT  [E]",
+		Text = "PLAN THE DAY  [E]",
 		TextColor3 = COLOR.bg,
 		TextScaled = true,
 		ZIndex = 11,
@@ -632,7 +632,7 @@ function UI.render(refs, snapshot)
 	if state == "Idle" then
 		refs.overlay.title.Text = "SECTOR 7 FOOD COURT"
 		refs.overlay.body.Text = IDLE_BODY
-		refs.overlay.start.Text = "START SHIFT  [E]"
+		refs.overlay.start.Text = "PLAN THE DAY  [E]"
 	elseif state == "Results" then
 		local stats = snapshot.stats
 		refs.overlay.title.Text = string.format("SHIFT OVER . %d c", snapshot.score)

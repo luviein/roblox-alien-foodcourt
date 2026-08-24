@@ -28,6 +28,10 @@ local ShiftService = {}
 local kitchens: { [Player]: any } = {}
 local actionBudget: { [Player]: { count: number, windowStart: number } } = {}
 
+-- Forward declared: pushSnapshot sends the day-s conditions along with every
+-- snapshot, and is defined above the roll that produces them.
+local conditionsFor
+
 -- ----------------------------------------------------------- rate limit ----
 
 local function allowAction(player: Player): boolean
@@ -101,7 +105,7 @@ end
 -- weather by closing and reopening it.
 local dayConditions: { [Player]: any } = {}
 
-local function conditionsFor(player: Player)
+function conditionsFor(player: Player)
 	local existing = dayConditions[player]
 	if existing then
 		return existing

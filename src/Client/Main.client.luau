@@ -26,6 +26,7 @@ local Loading = require(script.Parent.Loading)
 local Settings = require(script.Parent.Settings)
 local SettingsUI = require(script.Parent.SettingsUI)
 local ShopUI = require(script.Parent.ShopUI)
+local DraftUI = require(script.Parent.DraftUI)
 local UI = require(script.Parent.UI)
 
 local player = Players.LocalPlayer
@@ -48,6 +49,12 @@ local comboWasMaxed = false
 -- The menu drafted for the next shift. Empty means "whatever I own", which is
 -- what a player who has not opened the draft screen gets.
 local draftMenu: { string } = {}
+
+-- Declared up here so every callback below closes over these locals rather
+-- than over globals that do not exist yet. Both are assigned further down,
+-- after the UI they depend on has been built.
+local shop
+local draft
 
 -- ----------------------------------------------------------------- scene ---
 
@@ -94,16 +101,25 @@ local function onScrap()
 	sendAction({ action = "scrap" })
 end
 
+-- Outside a shift, E opens the draft rather than starting immediately: the
+-- menu is the first decision of the day, not a detail to skip past. From the
+-- results screen it still just means "continue".
 local function onStart()
 	if not ready then
 		return
 	end
+	if snapshot and snapshot.state == "Idle" then
+		if DraftUI.isOpen(draft) then
+			DraftUI.setOpen(draft, false)
+		else
+			DraftUI.seed(draft, snapshot.profile)
+			DraftUI.render(draft, snapshot.profile)
+			DraftUI.setOpen(draft, true)
+		end
+		return
+	end
 	Remotes.StartShift:FireServer(draftMenu)
 end
-
--- Declared before UI.build so the shop callback closes over the local rather
--- than a global that does not exist yet.
-local shop
 
 local refs = UI.build(playerGui, {
 	onKey = onKey,
@@ -123,6 +139,12 @@ SettingsUI.build(playerGui)
 
 shop = ShopUI.build(playerGui, function(kind, id)
 	sendAction({ action = "buy", kind = kind, id = id })
+end)
+
+draft = DraftUI.build(playerGui, function(menu)
+	draftMenu = menu
+	DraftUI.setOpen(draft, false)
+	Remotes.StartShift:FireServer(menu)
 end)
 
 -- Push preference changes to the profile. Debounced by the fact that the panel
@@ -336,6 +358,15 @@ Remotes.ShiftUpdate.OnClientEvent:Connect(function(newSnapshot)
 	end
 
 	ShopUI.render(shop, newSnapshot.profile)
+
+	-- Only worth redrawing between shifts; during service the panel is shut and
+	-- the unlocked set cannot change.
+	if newSnapshot.state == "Idle" then
+		DraftUI.seed(draft, newSnapshot.profile)
+		DraftUI.render(draft, newSnapshot.profile)
+	else
+		DraftUI.setOpen(draft, false)
+	end
 
 	UI.render(refs, snapshot)
 	Customers.sync(snapshot)
