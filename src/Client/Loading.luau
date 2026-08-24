@@ -10,7 +10,10 @@
 -- Its own ScreenGui with a high DisplayOrder, so it covers the HUD without
 -- having to co-ordinate ZIndex with it.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
 local Loading = {}
 
@@ -104,6 +107,21 @@ function Loading.show(playerGui: Instance)
 		TextScaled = true,
 	}, root)
 	make("UITextSizeConstraint", { MaxTextSize = 15 }, status)
+
+	-- Build stamp. If this does not match what you expect, Studio is running a
+	-- stale copy and no amount of editing files will change what you see.
+	make("TextLabel", {
+		Name = "Build",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.fromScale(0.99, 0.985),
+		Size = UDim2.fromScale(0.3, 0.03),
+		Font = Enum.Font.Code,
+		Text = "build " .. tostring(Config.BUILD),
+		TextColor3 = COLOR.dim,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Right,
+	}, root)
 
 	return { screen = screen, root = root, fill = fill, status = status, flavour = flavour }
 end

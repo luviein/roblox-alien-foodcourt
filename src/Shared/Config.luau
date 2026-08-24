@@ -4,6 +4,11 @@
 
 local Config = {}
 
+-- Bumped by hand whenever something changes that you need to SEE change.
+-- Shown in the corner of the loading screen, so one glance confirms Studio is
+-- actually running the current files rather than a stale synced copy.
+Config.BUILD = "r6-alias-01"
+
 -- ---------------------------------------------------------------- shift ----
 Config.SHIFT_DURATION = 180        -- seconds of service per round
 Config.ORDER_PATIENCE = 22         -- seconds before a customer walks out
