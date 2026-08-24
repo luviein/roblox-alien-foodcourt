@@ -5,6 +5,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local SoundDefs = require(Shared.SoundDefs)
@@ -117,6 +118,20 @@ function Audio.play(name: string)
 
 	sound.Parent = SoundService
 	sound:Play()
+
+	-- Some sources are long recordings where only the opening is the event --
+	-- a fryer that runs for a minute says nothing after the first second. Hold
+	-- briefly at full, fade out, and stop, so the sound marks the moment rather
+	-- than narrating the wait.
+	if def.hold and def.fade then
+		task.delay(def.hold, function()
+			if sound.Parent then
+				TweenService:Create(sound, TweenInfo.new(def.fade), { Volume = 0 }):Play()
+			end
+		end)
+		Debris:AddItem(sound, def.hold + def.fade + 0.1)
+		return
+	end
 
 	sound.Ended:Connect(function()
 		sound:Destroy()

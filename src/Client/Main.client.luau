@@ -262,6 +262,10 @@ local function handleEvent(event)
 		-- the food hit the floor makes that cost legible instead of silent.
 		FoodStack.dump()
 
+	elseif kind == "cookStarted" then
+		-- The moment the basket goes in, not the whole cook.
+		Audio.play("frying")
+
 	elseif kind == "orderArrived" then
 		Audio.play("ticketArrive")
 
@@ -293,16 +297,13 @@ Remotes.ShiftUpdate.OnClientEvent:Connect(function(newSnapshot)
 	-- by events. Every frame the answer is simply "is anything on the heat
 	-- right now", which cannot drift out of sync the way paired start/stop
 	-- calls do when an order burns or walks out.
-	local anyFrying, anySearing = false, false
+	local anySearing = false
 	for _, order in snapshot.orders do
-		if order.cookState == "cooking" then
-			anyFrying = true
-		end
 		if order.searState == "searing" then
 			anySearing = true
+			break
 		end
 	end
-	Audio.setLoop("frying", anyFrying and snapshot.state == "Service")
 	Audio.setLoop("sizzle", anySearing and snapshot.state == "Service")
 
 	UI.render(refs, snapshot)

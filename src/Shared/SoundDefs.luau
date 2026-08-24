@@ -38,6 +38,17 @@ SoundDefs.Sfx = {
 		pitchJitter = 0.03,
 	},
 
+	-- The basket going into the oil. `hold` at full volume then `fade` down to
+	-- nothing, so it reads as the moment the food hits the fat rather than
+	-- running for the whole cook.
+	frying = {
+		id = 6377822658,
+		volume = 0.5,
+		pitchJitter = 0.04,
+		hold = 0.35,
+		fade = 0.9,
+	},
+
 	-- Not sourced yet. Left at 0 so they no-op rather than erroring.
 	ticketArrive = { id = 0, volume = 0.6, pitchJitter = 0.04 },
 	fumble       = { id = 0, volume = 0.4, pitchJitter = 0.05 },
@@ -49,8 +60,14 @@ SoundDefs.Sfx = {
 -- as the pan is hot tells you something is STILL happening, which is the part
 -- that matters when it is out of sight behind the prep panel.
 SoundDefs.Loops = {
-	sizzle = { id = 7056816387, volume = 0.45 },   -- grill, while searing
-	frying = { id = 6377822658, volume = 0.35 },   -- fryer, while a basket is down
+	-- Only the grill. Searing lasts two or three seconds and you are holding a
+	-- key throughout, so a continuous sizzle is the feedback -- it stops when
+	-- you let go, which is the whole point.
+	--
+	-- The fryer is deliberately NOT here. A basket is down for far longer and
+	-- several can be down at once, so a held loop turns into a permanent hum
+	-- that stops carrying any information after the first second.
+	sizzle = { id = 7056816387, volume = 0.45 },
 }
 
 -- Trims the tracks themselves before the slider is applied. Music assets are
