@@ -36,6 +36,15 @@ local DEFAULT = {
 		burger = true,
 	},
 
+	-- Upgrade id -> levels owned.
+	upgrades = {
+		slots = 0,
+		tips = 0,
+		shift = 0,
+	},
+
+	rebirths = 0,
+
 	stats = {
 		shifts = 0,
 		served = 0,

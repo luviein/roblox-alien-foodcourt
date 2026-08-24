@@ -62,6 +62,15 @@ function Kitchen.new(participants: { Player })
 
 	self.events = {}  -- drained by ShiftService each tick
 
+	-- Replaced on every startShift; these are only the resting defaults so a
+	-- snapshot taken before the first shift is not full of nils.
+	self.loadout = {
+		menu = { "burger" },
+		orderSlots = Config.MAX_ORDER_SLOTS,
+		shiftDuration = Config.SHIFT_DURATION,
+		cashMultiplier = 1,
+	}
+
 	return self
 end
 
@@ -77,16 +86,20 @@ end
 
 -- ------------------------------------------------------------ lifecycle ----
 
-function Kitchen:startShift()
+-- `loadout` is what the player brings to this shift: the dishes they have
+-- unlocked and whatever their upgrades are worth. Kitchen never reads a profile
+-- itself -- it is handed the numbers.
+function Kitchen:startShift(loadout)
 	if self.state == "Service" then
 		return
 	end
 
 	local t = now()
 
+	self.loadout = loadout
 	self.state = "Service"
 	self.orders = {}
-	self.bag = OrderService.newBag()
+	self.bag = OrderService.newBag(loadout.menu, loadout.seed)
 	self.nextOrderId = 1
 	self.activeOrderId = nil
 	self.build = {}
@@ -97,7 +110,7 @@ function Kitchen:startShift()
 		served = 0, perfect = 0, good = 0, sloppy = 0, failed = 0, expired = 0,
 	}
 	self.shiftStartedAt = t
-	self.shiftEndsAt = t + Config.SHIFT_DURATION
+	self.shiftEndsAt = t + loadout.shiftDuration
 	self.nextSpawnAt = t + 1.0   -- brief beat before the first ticket
 	self.fumbleUntil = 0
 
@@ -115,7 +128,7 @@ function Kitchen:progress(): number
 		return 0
 	end
 	local elapsed = now() - self.shiftStartedAt
-	return math.clamp(elapsed / Config.SHIFT_DURATION, 0, 1)
+	return math.clamp(elapsed / math.max(self.loadout.shiftDuration, 1), 0, 1)
 end
 
 -- --------------------------------------------------------------- orders ----
@@ -532,7 +545,7 @@ function Kitchen:tick()
 	local maxActive = curveValue(Config.MAX_ACTIVE_ORDERS, progress)
 	local interval = curveValue(Config.SPAWN_INTERVAL, progress)
 
-	if t >= self.nextSpawnAt and #self.orders < math.min(maxActive, Config.MAX_ORDER_SLOTS) then
+	if t >= self.nextSpawnAt and #self.orders < math.min(maxActive, self.loadout.orderSlots) then
 		self:spawnOrder()
 		self.nextSpawnAt = t + interval
 	end
@@ -575,7 +588,7 @@ function Kitchen:snapshot()
 		state = self.state,
 		serverTime = now(),
 		shiftEndsAt = self.shiftEndsAt,
-		shiftDuration = Config.SHIFT_DURATION,
+		shiftDuration = self.loadout.shiftDuration,
 		score = self.score,
 		combo = self.combo,
 		comboMult = ScoreService.comboMultiplier(self.combo),

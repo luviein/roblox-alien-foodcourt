@@ -12,6 +12,7 @@ local Remotes = require(Shared.Remotes)
 
 local DataService = require(script.Parent.DataService)
 local Kitchen = require(script.Parent.Kitchen)
+local ShopDefs = require(Shared.ShopDefs)
 
 -- The only keys the station will ever accept. Anything else is dropped
 -- before it reaches gameplay code.
@@ -59,6 +60,9 @@ local function pushSnapshot(player: Player)
 			cash = profile.cash,
 			debtPaid = profile.debtPaid,
 			settings = profile.settings,
+			unlocked = profile.unlocked,
+			upgrades = profile.upgrades,
+			lastEarned = kitchen.lastEarned,
 			temporary = DataService.isTemporary(player),
 		}
 	end
@@ -84,6 +88,43 @@ end
 
 -- --------------------------------------------------------------- remotes ---
 
+-- Turns a saved profile into the numbers a shift runs on. The only place that
+-- knows how upgrades translate into gameplay.
+local function loadoutFor(player: Player)
+	local profile = DataService.get(player)
+
+	local menu = {}
+	if profile then
+		-- Order matters for the bag; walk the canonical list rather than the
+		-- profile table, whose iteration order is arbitrary.
+		if profile.unlocked.burger then
+			table.insert(menu, "burger")
+		end
+		for _, dishId in ShopDefs.DishOrder do
+			if profile.unlocked[dishId] then
+				table.insert(menu, dishId)
+			end
+		end
+	end
+	if #menu == 0 then
+		menu = { "burger" }
+	end
+
+	local upgrades = (profile and profile.upgrades) or {}
+
+	return {
+		menu = menu,
+		orderSlots = math.min(
+			ShopDefs.valueOf("slots", upgrades.slots or 0),
+			Config.MAX_ORDER_SLOTS
+		),
+		shiftDuration = Config.SHIFT_DURATION + ShopDefs.valueOf("shift", upgrades.shift or 0),
+		-- Applied to CASH at payout, never to score. Score stays comparable
+		-- between players; what it is worth does not.
+		cashMultiplier = 1 + ShopDefs.valueOf("tips", upgrades.tips or 0),
+	}
+end
+
 local function onStartShift(player: Player)
 	local kitchen = kitchens[player]
 	if not kitchen then
@@ -93,7 +134,7 @@ local function onStartShift(player: Player)
 	if kitchen.state == "Results" then
 		kitchen:closeResults()
 	elseif kitchen.state == "Idle" then
-		kitchen:startShift()
+		kitchen:startShift(loadoutFor(player))
 	end
 
 	pushSnapshot(player)
@@ -155,6 +196,42 @@ local function onStationAction(player: Player, payload: any)
 		end)
 		return
 
+	elseif action == "buy" then
+		-- Purchases are entirely server-side: the client asks for a thing by
+		-- id and the server decides whether it is affordable, buyable, and not
+		-- already owned. Nothing about price or ownership is trusted from the
+		-- message.
+		if kitchen.state ~= "Idle" then
+			return   -- no shopping mid-shift
+		end
+
+		local kind, id = payload.kind, payload.id
+		if typeof(kind) ~= "string" or typeof(id) ~= "string" then
+			return
+		end
+
+		DataService.update(player, function(data)
+			if kind == "dish" then
+				local cost = ShopDefs.dishCost(id)
+				if not cost or data.unlocked[id] or data.cash < cost then
+					return
+				end
+				data.cash -= cost
+				data.unlocked[id] = true
+
+			elseif kind == "upgrade" then
+				local owned = data.upgrades[id] or 0
+				local cost = ShopDefs.upgradeCost(id, owned)
+				if not cost or owned >= ShopDefs.maxLevel(id) or data.cash < cost then
+					return
+				end
+				data.cash -= cost
+				data.upgrades[id] = owned + 1
+			end
+		end)
+
+		DataService.save(player)
+
 	elseif action == "searStart" then
 		kitchen:searStart()
 
@@ -192,8 +269,10 @@ local function startTickLoop()
 				-- rather than inside Kitchen keeps the gameplay state machine
 				-- unaware of saving.
 				if before == "Service" and kitchen.state == "Results" then
+					local earned = math.floor(kitchen.score * kitchen.loadout.cashMultiplier + 0.5)
+					kitchen.lastEarned = earned
 					DataService.update(player, function(data)
-						data.cash += kitchen.score
+						data.cash += earned
 						data.stats.shifts += 1
 						data.stats.served += kitchen.stats.served
 						data.stats.bestScore = math.max(data.stats.bestScore, kitchen.score)

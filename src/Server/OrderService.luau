@@ -34,13 +34,17 @@ local function shuffle<T>(list: { T }, rng: Random): { T }
 end
 
 export type Bag = {
+	menu: { string },
 	contents: { string },
 	rng: Random,
 	lastDrawn: string?,
 }
 
-function OrderService.newBag(seed: number?): Bag
+-- `menu` is the dish ids this shift can serve -- the player's unlocked set,
+-- not everything that exists.
+function OrderService.newBag(menu: { string }, seed: number?): Bag
 	return {
+		menu = menu,
 		contents = {},
 		rng = if seed then Random.new(seed) else Random.new(),
 		lastDrawn = nil,
@@ -48,7 +52,7 @@ function OrderService.newBag(seed: number?): Bag
 end
 
 local function refill(bag: Bag)
-	local fresh = table.clone(DishDefs.ActiveMenu)
+	local fresh = table.clone(bag.menu)
 	shuffle(fresh, bag.rng)
 
 	-- Avoid a repeat straddling the bag boundary.

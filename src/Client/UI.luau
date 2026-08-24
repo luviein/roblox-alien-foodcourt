@@ -397,7 +397,48 @@ local function buildOverlay(parent: Instance, onStart: () -> ())
 	make("UITextSizeConstraint", { MaxTextSize = 22 }, start)
 	start.Activated:Connect(onStart)
 
-	return { frame = overlay, title = title, body = body, start = start }
+	-- Only reachable between shifts, which is also the only time the server
+	-- accepts a purchase. Spending mid-service would change the loadout under
+	-- a running shift.
+	local shop = make("TextButton", {
+		Name = "Shop",
+		BackgroundColor3 = COLOR.panelHi,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Position = UDim2.fromScale(0.5, 0.82),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Size = UDim2.fromScale(0.26, 0.07),
+		Font = Enum.Font.GothamBold,
+		Text = "SUPPLY DEPOT",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		ZIndex = 11,
+	}, overlay)
+	corner(shop, 8)
+	make("UITextSizeConstraint", { MaxTextSize = 18 }, shop)
+
+	local cash = make("TextLabel", {
+		Name = "Cash",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.5, 0.9),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Size = UDim2.fromScale(0.4, 0.05),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.perfect,
+		TextScaled = true,
+		ZIndex = 11,
+	}, overlay)
+	make("UITextSizeConstraint", { MaxTextSize = 20 }, cash)
+
+	return {
+		frame = overlay,
+		title = title,
+		body = body,
+		start = start,
+		shop = shop,
+		cash = cash,
+	}
 end
 
 local function buildFlash(parent: Instance)
@@ -479,6 +520,9 @@ function UI.build(playerGui: Instance, callbacks): any
 	}, root)
 	make("UITextSizeConstraint", { MaxTextSize = 18 }, hint)
 
+	local overlay = buildOverlay(root, callbacks.onStart)
+	overlay.shop.Activated:Connect(callbacks.onOpenShop)
+
 	return {
 		screen = screen,
 		root = root,
@@ -490,7 +534,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		searMeter = buildSearMeter(prep),
 		keyGrid = buildKeyGrid(prep, callbacks.onKey),
 		actionBar = buildActionBar(prep, callbacks.onServe, callbacks.onScrap),
-		overlay = buildOverlay(root, callbacks.onStart),
+		overlay = overlay,
 		flash = buildFlash(root),
 	}
 end
@@ -518,6 +562,11 @@ function UI.render(refs, snapshot)
 	elseif state == "Results" then
 		local stats = snapshot.stats
 		refs.overlay.title.Text = string.format("SHIFT OVER . %d c", snapshot.score)
+		if snapshot.profile and snapshot.profile.lastEarned then
+			refs.overlay.title.Text = string.format(
+				"SHIFT OVER . %d pts . +%d c",
+				snapshot.score, snapshot.profile.lastEarned)
+		end
 		refs.overlay.body.Text = table.concat({
 			string.format("Perfect %d      Good %d      Sloppy %d", stats.perfect, stats.good, stats.sloppy),
 			string.format("Wrong order %d      Walked out %d", stats.failed, stats.expired),
@@ -525,6 +574,17 @@ function UI.render(refs, snapshot)
 			string.format("Best combo  x%d", snapshot.bestCombo),
 		}, "\n")
 		refs.overlay.start.Text = "CONTINUE  [E]"
+	end
+
+	-- Cash and the shop live on the between-shifts screen only: purchases
+	-- change the loadout, and the server refuses them mid-service anyway.
+	if snapshot.profile then
+		refs.overlay.cash.Text = if snapshot.profile.temporary
+			then "PROGRESS NOT SAVING - see Output"
+			else string.format("%d c", snapshot.profile.cash)
+		refs.overlay.cash.TextColor3 = if snapshot.profile.temporary
+			then COLOR.bad
+			else COLOR.perfect
 	end
 
 	refs.topBar.score.Text = string.format("%d c", snapshot.score)

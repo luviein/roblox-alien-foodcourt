@@ -25,6 +25,7 @@ local FoodStack = require(script.Parent.FoodStack)
 local Loading = require(script.Parent.Loading)
 local Settings = require(script.Parent.Settings)
 local SettingsUI = require(script.Parent.SettingsUI)
+local ShopUI = require(script.Parent.ShopUI)
 local UI = require(script.Parent.UI)
 
 local player = Players.LocalPlayer
@@ -96,15 +97,26 @@ local function onStart()
 	Remotes.StartShift:FireServer()
 end
 
+-- Declared before UI.build so the shop callback closes over the local rather
+-- than a global that does not exist yet.
+local shop
+
 local refs = UI.build(playerGui, {
 	onKey = onKey,
 	onServe = onServe,
 	onScrap = onScrap,
 	onSelect = onSelect,
 	onStart = onStart,
+	onOpenShop = function()
+		ShopUI.setOpen(shop, true)
+	end,
 })
 
 SettingsUI.build(playerGui)
+
+shop = ShopUI.build(playerGui, function(kind, id)
+	sendAction({ action = "buy", kind = kind, id = id })
+end)
 
 -- Push preference changes to the profile. Debounced by the fact that the panel
 -- only fires on an actual change.
@@ -305,6 +317,8 @@ Remotes.ShiftUpdate.OnClientEvent:Connect(function(newSnapshot)
 	if newSnapshot.profile then
 		Settings.apply(newSnapshot.profile.settings)
 	end
+
+	ShopUI.render(shop, newSnapshot.profile)
 
 	UI.render(refs, snapshot)
 	Customers.sync(snapshot)
