@@ -67,7 +67,7 @@ local warnedNoJoints = false
 
 -- Draws the first customer's body composition on screen. Turn off once the
 -- rig pipeline is settled.
-local DEBUG_BODY = true
+local DEBUG_BODY = false
 
 -- ------------------------------------------------------------- billboard ---
 
@@ -312,35 +312,41 @@ local function buildRigCustomer(parent: Instance)
 		end
 	end
 
-	-- What is this model actually made of? Every theory so far has been about
-	-- animation when the real answer was about identity.
-	local census = { Motor6D = 0, Weld = 0, WeldConstraint = 0, Attachment = 0, BasePart = 0 }
-	for _, descendant in model:GetDescendants() do
-		for class in census do
-			if descendant:IsA(class) then
-				census[class] += 1
+	-- A census of what this model is actually made of. Only worth walking the
+	-- descendants for when the panel is on -- but kept, because working out
+	-- that these rigs are held together by AnimationConstraints rather than
+	-- Motor6Ds took seven rounds of guessing and one round of asking.
+	local diagnostic = "(diagnostics off)"
+
+	if DEBUG_BODY then
+		local census = { Motor6D = 0, Weld = 0, WeldConstraint = 0, Attachment = 0, BasePart = 0 }
+		for _, descendant in model:GetDescendants() do
+			for class in census do
+				if descendant:IsA(class) then
+					census[class] += 1
+				end
 			end
 		end
-	end
 
-	local childNames = {}
-	for _, child in model:GetChildren() do
-		table.insert(childNames, child.Name)
-		if #childNames >= 12 then
-			break
+		local childNames = {}
+		for _, child in model:GetChildren() do
+			table.insert(childNames, child.Name)
+			if #childNames >= 12 then
+				break
+			end
 		end
-	end
 
-	local diagnostic = ("rigType=%s buildRig=%s joints_made=%d anchored=%d | parts=%d motor6d=%d weld=%d weldcon=%d attach=%d\nchildren: %s\nwhy: %s")
-		:format(
-			humanoid.RigType.Name,
-			if buildOk then "ok" else ("FAILED: " .. tostring(buildErr)),
-			jointsMade,
-			anchoredParts,
-			census.BasePart, census.Motor6D, census.Weld, census.WeldConstraint, census.Attachment,
-			table.concat(childNames, ", "),
-			if jointNotes ~= "" then jointNotes else "(all 15 joints created)"
-		)
+		diagnostic = ("rigType=%s buildRig=%s joints_made=%d anchored=%d | parts=%d motor6d=%d weld=%d weldcon=%d attach=%d\nchildren: %s\nwhy: %s")
+			:format(
+				humanoid.RigType.Name,
+				if buildOk then "ok" else ("FAILED: " .. tostring(buildErr)),
+				jointsMade,
+				anchoredParts,
+				census.BasePart, census.Motor6D, census.Weld, census.WeldConstraint, census.Attachment,
+				table.concat(childNames, ", "),
+				if jointNotes ~= "" then jointNotes else "(all 15 joints created)"
+			)
+	end
 
 	-- true: catalog rigs arrive T-posed and need the rest offset applied.
 	local rig, jointNames = NpcAnimator.bind(model, true)
