@@ -49,18 +49,9 @@ local function pushSnapshot(player: Player)
 	if not kitchen then
 		return
 	end
-	Remotes.ShiftUpdate:FireClient(player, kitchen:snapshot())
-end
-
-local function flushEvents(player: Player)
-	local kitchen = kitchens[player]
-	if not kitchen then
-		return
-	end
-	local events = kitchen:drainEvents()
-	if #events > 0 then
-		Remotes.ShiftEvent:FireClient(player, events)
-	end
+	local snapshot = kitchen:snapshot()
+	snapshot.events = kitchen:drainEvents()
+	Remotes.ShiftUpdate:FireClient(player, snapshot)
 end
 
 -- ------------------------------------------------------------ lifecycle ----
@@ -93,7 +84,6 @@ local function onStartShift(player: Player)
 		kitchen:startShift()
 	end
 
-	flushEvents(player)
 	pushSnapshot(player)
 end
 
@@ -143,7 +133,6 @@ local function onStationAction(player: Player, payload: any)
 
 	-- Answer immediately rather than waiting for the next tick, so input
 	-- feels instant instead of up to 100ms late.
-	flushEvents(player)
 	pushSnapshot(player)
 end
 
@@ -157,7 +146,6 @@ local function startTickLoop()
 			for player, kitchen in kitchens do
 				local before = kitchen.state
 				kitchen:tick()
-				flushEvents(player)
 				-- Idle kitchens have nothing moving; skip the traffic unless
 				-- the state just changed.
 				if kitchen.state ~= "Idle" or before ~= "Idle" then

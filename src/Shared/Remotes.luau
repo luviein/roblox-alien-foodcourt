@@ -5,11 +5,14 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+-- Transient feedback (grades, fumbles) rides inside the snapshot rather than
+-- on its own remote: separate remotes have no ordering guarantee between them,
+-- and "the plate emptied" arriving before "you served it" picks the wrong
+-- animation.
 local NAMES = {
 	"StationAction",  -- client -> server : {action = "...", ...}
 	"StartShift",     -- client -> server : no payload
-	"ShiftUpdate",    -- server -> client : full state snapshot
-	"ShiftEvent",     -- server -> client : transient feedback (grades, fumbles)
+	"ShiftUpdate",    -- server -> client : full snapshot, with .events attached
 }
 
 local folder: Folder

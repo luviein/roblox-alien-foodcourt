@@ -9,46 +9,75 @@
 --
 -- Tags and workload are unused in P0 -- they are the hooks the environment
 -- system in P2 plugs into. They live here now so dishes never need rewriting.
-
-export type Component = {
-	key: string,
-	id: string,
-	required: boolean,
-}
-
-export type Dish = {
-	id: string,
-	displayName: string,
-	alienName: string,
-	archetype: string,
-	baseValue: number,
-	orderStrict: boolean,
-	components: { Component },
-	timing: { perfect: number, good: number, sloppy: number },
-	tags: { string },
-	workload: { [string]: number },
-}
+--
+-- `visual` describes how the ingredient is built in 3D on the plate:
+--   shape : "cylinder" | "block" | "dome" | "rod"
+--   size  : stud dimensions (x,z = footprint, y = thickness)
+--   rise  : how far the stack grows after adding this layer
+--   tilt  : degrees of random tilt, for a draped/hand-made look
+-- Swapping any of these for a MeshPart later is a one-line change in FoodStack.
 
 local DishDefs = {}
 
--- Display metadata only -- colour is used for the grey-box UI chips.
 DishDefs.Ingredients = {
-	bun_bottom = { name = "Bottom Bun", color = Color3.fromRGB(206, 162, 96) },
-	bun_top    = { name = "Top Bun",    color = Color3.fromRGB(224, 180, 110) },
-	patty      = { name = "Patty",      color = Color3.fromRGB(102, 66, 46) },
-	cheese     = { name = "Cheese",     color = Color3.fromRGB(240, 190, 60) },
-	lettuce    = { name = "Lettuce",    color = Color3.fromRGB(120, 190, 90) },
-	pickle     = { name = "Pickle",     color = Color3.fromRGB(96, 150, 70) },
+	bun_bottom = {
+		name = "Bottom Bun", color = Color3.fromRGB(206, 162, 96),
+		visual = { shape = "cylinder", size = Vector3.new(2.4, 0.45, 2.4), rise = 0.45, tilt = 0 },
+	},
+	bun_top = {
+		name = "Top Bun", color = Color3.fromRGB(224, 180, 110),
+		visual = { shape = "dome", size = Vector3.new(2.4, 1.1, 2.4), rise = 0.7, tilt = 0 },
+	},
+	patty = {
+		name = "Patty", color = Color3.fromRGB(102, 66, 46),
+		visual = { shape = "cylinder", size = Vector3.new(2.2, 0.42, 2.2), rise = 0.42, tilt = 3 },
+	},
+	cheese = {
+		name = "Cheese", color = Color3.fromRGB(240, 190, 60),
+		visual = { shape = "block", size = Vector3.new(2.3, 0.12, 2.3), rise = 0.14, tilt = 7 },
+	},
+	lettuce = {
+		name = "Lettuce", color = Color3.fromRGB(120, 190, 90),
+		visual = { shape = "cylinder", size = Vector3.new(2.6, 0.2, 2.6), rise = 0.2, tilt = 5 },
+	},
+	pickle = {
+		name = "Pickle", color = Color3.fromRGB(96, 150, 70),
+		visual = { shape = "cylinder", size = Vector3.new(1.1, 0.14, 1.1), rise = 0.14, tilt = 10 },
+	},
 
-	hotdog_bun = { name = "Split Bun",  color = Color3.fromRGB(214, 170, 104) },
-	sausage    = { name = "Sausage",    color = Color3.fromRGB(170, 84, 66) },
-	onion      = { name = "Onion",      color = Color3.fromRGB(226, 214, 196) },
-	ketchup    = { name = "Ketchup",    color = Color3.fromRGB(198, 52, 48) },
-	mustard    = { name = "Mustard",    color = Color3.fromRGB(226, 186, 48) },
+	hotdog_bun = {
+		name = "Split Bun", color = Color3.fromRGB(214, 170, 104),
+		visual = { shape = "block", size = Vector3.new(3.0, 0.5, 1.3), rise = 0.5, tilt = 0 },
+	},
+	sausage = {
+		name = "Sausage", color = Color3.fromRGB(170, 84, 66),
+		visual = { shape = "rod", size = Vector3.new(0.55, 2.8, 0.55), rise = 0.5, tilt = 0 },
+	},
+	onion = {
+		name = "Onion", color = Color3.fromRGB(226, 214, 196),
+		visual = { shape = "block", size = Vector3.new(2.4, 0.12, 0.85), rise = 0.14, tilt = 6 },
+	},
+	ketchup = {
+		name = "Ketchup", color = Color3.fromRGB(198, 52, 48),
+		visual = { shape = "block", size = Vector3.new(2.2, 0.1, 0.28), rise = 0.11, tilt = 4 },
+	},
+	mustard = {
+		name = "Mustard", color = Color3.fromRGB(226, 186, 48),
+		visual = { shape = "block", size = Vector3.new(2.2, 0.1, 0.28), rise = 0.11, tilt = 4 },
+	},
 
-	tortilla   = { name = "Tortilla",   color = Color3.fromRGB(228, 206, 158) },
-	beef       = { name = "Beef",       color = Color3.fromRGB(122, 74, 50) },
-	salsa      = { name = "Salsa",      color = Color3.fromRGB(186, 60, 46) },
+	tortilla = {
+		name = "Tortilla", color = Color3.fromRGB(228, 206, 158),
+		visual = { shape = "cylinder", size = Vector3.new(2.7, 0.14, 2.7), rise = 0.14, tilt = 0 },
+	},
+	beef = {
+		name = "Beef", color = Color3.fromRGB(122, 74, 50),
+		visual = { shape = "cylinder", size = Vector3.new(2.1, 0.32, 2.1), rise = 0.32, tilt = 4 },
+	},
+	salsa = {
+		name = "Salsa", color = Color3.fromRGB(186, 60, 46),
+		visual = { shape = "cylinder", size = Vector3.new(1.9, 0.16, 1.9), rise = 0.16, tilt = 8 },
+	},
 }
 
 DishDefs.Dishes = {
@@ -114,8 +143,12 @@ DishDefs.Dishes = {
 -- What can show up on tickets in P0. Later this becomes the player's drafted menu.
 DishDefs.ActiveMenu = { "burger", "hotdog", "taco" }
 
-function DishDefs.get(dishId: string): Dish?
+function DishDefs.get(dishId: string)
 	return DishDefs.Dishes[dishId]
+end
+
+function DishDefs.ingredient(id: string)
+	return DishDefs.Ingredients[id]
 end
 
 function DishDefs.ingredientName(id: string): string

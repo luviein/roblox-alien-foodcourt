@@ -1,5 +1,5 @@
 --!strict
--- Client entry point: input in, snapshots out to the UI.
+-- Client entry point: input in, snapshots out to the scene and the HUD.
 --
 -- The client is deliberately dumb. It never decides whether a key was correct,
 -- never grades a dish, never runs a timer that matters. It sends intents and
@@ -15,14 +15,27 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Remotes)
 
+local Scene = require(script.Parent.Scene)
+local Customers = require(script.Parent.Customers)
+local FoodStack = require(script.Parent.FoodStack)
 local UI = require(script.Parent.UI)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local snapshot = nil
+local snapshot: any = nil
 
--- ------------------------------------------------------------- intents -----
+-- ----------------------------------------------------------------- scene ---
+
+Scene.applyLighting()
+local scene = Scene.build()
+Scene.lockCamera()
+Scene.parkCharacter()
+
+Customers.init(scene)
+FoodStack.init(scene)
+
+-- --------------------------------------------------------------- intents ---
 
 local function sendAction(payload)
 	Remotes.StationAction:FireServer(payload)
@@ -59,7 +72,7 @@ local refs = UI.build(playerGui, {
 	onStart = onStart,
 })
 
--- --------------------------------------------------------------- input -----
+-- ----------------------------------------------------------------- input ---
 
 local INGREDIENT_KEYS = {
 	[Enum.KeyCode.Q] = "Q",
@@ -97,7 +110,6 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 	if not inService then
 		if keyCode == Enum.KeyCode.E then
 			onStart()
-			return Enum.ContextActionResult.Sink
 		end
 		return Enum.ContextActionResult.Sink
 	end
@@ -126,35 +138,67 @@ local BOUND_KEYS = {
 -- we want -- this is a fixed-camera screen, not a platformer.
 ContextActionService:BindAction("AFC_Input", handleInput, false, table.unpack(BOUND_KEYS))
 
--- --------------------------------------------------------------- events ----
+-- ---------------------------------------------------------------- events ---
 
+-- Events ride inside the snapshot, so they are guaranteed to be handled before
+-- the state they describe is drawn. Order matters: the plate has to know it
+-- was SERVED before it sees an empty build list, or it plays the wrong exit.
 local function handleEvent(event)
-	if event.type == "graded" then
+	local kind = event.type
+
+	if kind == "ingredientAdded" then
+		UI.pulseKey(refs, event.key, true)
+
+	elseif kind == "fumble" then
+		UI.pulseKey(refs, event.key, false)
+		Scene.shake(0.12, 0.18)
+
+	elseif kind == "graded" then
 		UI.flashGrade(refs, event)
-	elseif event.type == "fumble" then
-		UI.flashKey(refs, event.key)
-	elseif event.type == "expired" then
+		if event.grade == "Fail" then
+			FoodStack.dump()
+			Customers.markExit(event.orderId, "angry")
+		else
+			FoodStack.serve()
+			Customers.markExit(event.orderId, "happy")
+			if event.grade == "Perfect" then
+				Scene.shake(0.35, 0.22)
+			end
+		end
+
+	elseif kind == "expired" then
 		UI.flash(refs, "WALKED OUT", UI.COLOR.bad)
+		Customers.markExit(event.orderId, "angry")
+
+	elseif kind == "scrapped" or kind == "selected" then
+		-- Switching tickets abandons the plate, same as scrapping it. Showing
+		-- the food hit the floor makes that cost legible instead of silent.
+		FoodStack.dump()
+
+	elseif kind == "shiftStarted" or kind == "shiftEnded" then
+		Customers.clear()
+		FoodStack.clear()
 	end
 end
 
 Remotes.ShiftUpdate.OnClientEvent:Connect(function(newSnapshot)
-	snapshot = newSnapshot
-	UI.render(refs, snapshot)
-end)
-
-Remotes.ShiftEvent.OnClientEvent:Connect(function(events)
-	for _, event in events do
-		handleEvent(event)
+	if newSnapshot.events then
+		for _, event in newSnapshot.events do
+			handleEvent(event)
+		end
 	end
+
+	snapshot = newSnapshot
+
+	UI.render(refs, snapshot)
+	Customers.sync(snapshot)
+	FoodStack.sync(snapshot.build)
 end)
 
-RunService.RenderStepped:Connect(function()
+RunService.RenderStepped:Connect(function(dt)
 	UI.renderTimers(refs, snapshot)
+	Customers.update(dt, snapshot)
 end)
-
--- Ask for current state now that the handlers above are connected.
-sendAction({ action = "sync" })
 
 -- Full-screen game: get the default Roblox chrome out of the way.
 pcall(function()
@@ -162,5 +206,8 @@ pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
 end)
+
+-- Ask for current state now that the handlers above are connected.
+sendAction({ action = "sync" })
 
 print("[AlienFoodCourt] client ready")

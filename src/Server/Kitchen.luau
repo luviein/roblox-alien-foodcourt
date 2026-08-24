@@ -218,6 +218,7 @@ function Kitchen:addIngredient(key: string)
 		self:emit({
 			type = "ingredientAdded",
 			orderId = order.id,
+			key = key,
 			ingredientId = ingredientId,
 			step = #self.build,
 			total = #order.required,
