@@ -137,14 +137,24 @@ function Kitchen:activeOrder()
 	return order
 end
 
--- If nothing is selected (or what was selected just left), fall to the oldest
--- ticket still waiting.
+-- If nothing is in hand (or what was just left), pick up the oldest ticket
+-- that actually needs work. Orders already in the fryer are skipped: they need
+-- nothing until they are ready, and auto-selecting one would reopen the prep
+-- panel over a dish you cannot touch.
 function Kitchen:ensureSelection()
 	if self.activeOrderId and self:findOrder(self.activeOrderId) then
 		return
 	end
-	self.activeOrderId = if self.orders[1] then self.orders[1].id else nil
+
 	self.build = {}
+	self.activeOrderId = nil
+
+	for _, order in self.orders do
+		if order.cookState ~= "cooking" then
+			self.activeOrderId = order.id
+			return
+		end
+	end
 end
 
 function Kitchen:spawnOrder()
@@ -217,8 +227,13 @@ function Kitchen:addIngredient(key: string)
 	end
 
 	local order = self:activeOrder()
-	if not order or order.cookState then
-		-- Fried orders are not assembled; the letter keys do nothing on them.
+	if not order then
+		return
+	end
+
+	-- Once it is in the oil the keys do nothing: the only thing left is to come
+	-- back for it.
+	if order.cookState and order.cookState ~= "raw" then
 		return
 	end
 
@@ -228,6 +243,8 @@ function Kitchen:addIngredient(key: string)
 
 	if correct then
 		table.insert(self.build, ingredientId)
+		local complete = #self.build == #order.required
+
 		self:emit({
 			type = "ingredientAdded",
 			orderId = order.id,
@@ -235,8 +252,20 @@ function Kitchen:addIngredient(key: string)
 			ingredientId = ingredientId,
 			step = #self.build,
 			total = #order.required,
-			complete = #self.build == #order.required,
+			complete = complete,
 		})
+
+		-- Finishing a fried dish's prep sequence lowers the basket, and from
+		-- there it cooks on its own. No separate key for "start": completing
+		-- the steps IS starting it.
+		if complete and order.cookState == "raw" then
+			self:startCook(order)
+			self.build = {}
+			-- Drop it from the hand so the prep panel closes and you are moved
+			-- on to whatever needs doing while this cooks.
+			self.activeOrderId = nil
+			self:ensureSelection()
+		end
 		return
 	end
 
@@ -369,12 +398,12 @@ end
 function Kitchen:handleFryOrder(order): boolean
 	local t = now()
 
-	if order.cookState == "raw" then
-		self:startCook(order)
-
-	elseif order.cookState == "cooking" then
-		-- Collected raw. That is a wrong order, not a slow one.
-		self:award(order, "Fail")
+	if order.cookState == "raw" or order.cookState == "cooking" then
+		-- Nothing to collect yet. Deliberately a no-op rather than a raw
+		-- collection: failing an order that is merely still cooking punishes a
+		-- stray keypress, and a stray keypress aimed at one ticket should never
+		-- ruin another.
+		return true
 
 	elseif order.cookState == "ready" then
 		local dish = DishDefs.get(order.dishId)

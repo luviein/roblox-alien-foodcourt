@@ -139,9 +139,9 @@ local function buildPlateReadout(parent: Instance)
 	local label = make("TextLabel", {
 		Name = "PlateReadout",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.5, 0.585),
+		Position = UDim2.fromScale(0.5, 0.16),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromScale(0.4, 0.045),
+		Size = UDim2.fromScale(0.7, 0.1),
 		Font = Enum.Font.GothamBold,
 		Text = "",
 		TextColor3 = COLOR.dim,
@@ -155,9 +155,9 @@ local function buildKeyGrid(parent: Instance, onKey: (string) -> ())
 	local grid = make("Frame", {
 		Name = "KeyGrid",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.5, 0.645),
+		Position = UDim2.fromScale(0.5, 0.3),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromScale(0.56, 0.2),
+		Size = UDim2.fromScale(0.9, 0.44),
 	}, parent)
 
 	make("UIListLayout", {
@@ -253,9 +253,9 @@ local function buildActionBar(parent: Instance, onServe: () -> (), onScrap: () -
 	local bar = make("Frame", {
 		Name = "ActionBar",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.5, 0.865),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromScale(0.56, 0.075),
+		Position = UDim2.fromScale(0.5, 0.97),
+		AnchorPoint = Vector2.new(0.5, 1),
+		Size = UDim2.fromScale(0.9, 0.17),
 	}, parent)
 
 	make("UIListLayout", {
@@ -387,13 +387,60 @@ function UI.build(playerGui: Instance, callbacks): any
 		Size = UDim2.fromScale(1, 1),
 	}, screen)
 
+	-- The prep panel is a modal: nothing to press until you have picked up an
+	-- order. An empty key grid sitting there permanently invited pressing keys
+	-- that were not attached to anything.
+	local prep = make("Frame", {
+		Name = "PrepPanel",
+		BackgroundColor3 = COLOR.bg,
+		BackgroundTransparency = 0.25,
+		BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.fromScale(0.5, 0.985),
+		Size = UDim2.fromScale(0.62, 0.42),
+		Visible = false,
+	}, root)
+	corner(prep, 12)
+	stroke(prep, COLOR.stroke, 2)
+
+	local prepTitle = make("TextLabel", {
+		Name = "PrepTitle",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.5, 0.03),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Size = UDim2.fromScale(0.9, 0.11),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+	}, prep)
+	make("UITextSizeConstraint", { MaxTextSize = 22 }, prepTitle)
+
+	-- Shown instead of the panel when nothing is in hand.
+	local hint = make("TextLabel", {
+		Name = "Hint",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.fromScale(0.5, 0.95),
+		Size = UDim2.fromScale(0.6, 0.06),
+		Font = Enum.Font.GothamMedium,
+		Text = "click a customer's order to start it",
+		TextColor3 = COLOR.dim,
+		TextScaled = true,
+		Visible = false,
+	}, root)
+	make("UITextSizeConstraint", { MaxTextSize = 18 }, hint)
+
 	return {
 		screen = screen,
 		root = root,
+		prep = prep,
+		prepTitle = prepTitle,
+		hint = hint,
 		topBar = buildTopBar(root),
-		plateReadout = buildPlateReadout(root),
-		keyGrid = buildKeyGrid(root, callbacks.onKey),
-		actionBar = buildActionBar(root, callbacks.onServe, callbacks.onScrap),
+		plateReadout = buildPlateReadout(prep),
+		keyGrid = buildKeyGrid(prep, callbacks.onKey),
+		actionBar = buildActionBar(prep, callbacks.onServe, callbacks.onScrap),
 		overlay = buildOverlay(root, callbacks.onStart),
 		flash = buildFlash(root),
 	}
@@ -444,13 +491,25 @@ function UI.render(refs, snapshot)
 		end
 	end
 
+	-- The prep panel is only up while you actually have an order in hand. A
+	-- cooking order is not in hand -- the server drops it the moment the basket
+	-- goes down, and the countdown lives on the customer's ticket from there.
+	local inHand = state == "Service" and activeOrder ~= nil
+	refs.prep.Visible = inHand
+	refs.hint.Visible = state == "Service" and not inHand
+
+	if inHand then
+		local dish = DishDefs.get(activeOrder.dishId)
+		refs.prepTitle.Text = string.upper(dish and dish.displayName or activeOrder.dishId)
+	end
+
 	-- Fried orders have no plate. The readout carries the cook prompt instead,
 	-- and while it is counting down renderTimers owns the text -- writing it
 	-- from both places is what made it flicker.
 	local cookState = activeOrder and activeOrder.cookState
 
 	if cookState == "raw" then
-		refs.plateReadout.Text = "SPACE to start frying"
+		refs.plateReadout.Text = string.format("STEP  %d / %d", #snapshot.build, if activeOrder then #activeOrder.required else 0)
 	elseif cookState == "burnt" then
 		refs.plateReadout.Text = "BURNT   SPACE to bin it"
 	elseif cookState ~= "cooking" and cookState ~= "ready" then

@@ -66,6 +66,14 @@ DishDefs.Ingredients = {
 		visual = { shape = "block", size = Vector3.new(2.2, 0.1, 0.28), rise = 0.11, tilt = 4 },
 	},
 
+	-- Fryer steps. No `visual`, so nothing is stacked on the plate for these --
+	-- they are actions, not ingredients, and FoodStack skips anything without
+	-- a visual. Reusing the ingredient system means the fryer needs no separate
+	-- input handling: it is a key sequence like any other dish.
+	basket_load  = { name = "Load Basket",  color = Color3.fromRGB(196, 200, 214) },
+	basket_shake = { name = "Shake Basket", color = Color3.fromRGB(168, 174, 192) },
+	basket_lower = { name = "Lower Basket", color = Color3.fromRGB(232, 148, 62) },
+
 	tortilla = {
 		name = "Tortilla", color = Color3.fromRGB(228, 206, 158),
 		visual = { shape = "cylinder", size = Vector3.new(2.7, 0.14, 2.7), rise = 0.14, tilt = 0 },
@@ -142,8 +150,9 @@ DishDefs.Dishes = {
 		workload = { dishLoad = 1, trashLoad = 2, greaseLoad = 1, messRisk = 2, prepTime = 2 },
 	},
 
-	-- Fryer dishes. No components: you drop a basket and pull it at the right
-	-- moment, and the whole skill is in when you come back for it.
+	-- Fryer dishes. The components are the prep steps -- load, shake, lower --
+	-- so the fryer reuses the assembly input rather than needing its own.
+	-- Completing the sequence lowers the basket and cooking starts.
 	--
 	--   cookTime  : seconds until the basket is ready
 	--   perfect   : seconds after ready that still counts as Perfect
@@ -156,6 +165,11 @@ DishDefs.Dishes = {
 		station = "Fryer",
 		archetype = "Fry",
 		baseValue = 28,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "basket_load",  required = true },
+			{ key = "W", id = "basket_lower", required = true },
+		},
 		fry = { cookTime = 3, perfect = 1.5, good = 3, burn = 6 },
 		tags = { "Hot", "Fried", "Greasy" },
 		workload = { dishLoad = 0, trashLoad = 2, greaseLoad = 3, messRisk = 1, prepTime = 1 },
@@ -168,6 +182,12 @@ DishDefs.Dishes = {
 		station = "Fryer",
 		archetype = "Fry",
 		baseValue = 36,
+		orderStrict = true,
+		components = {
+			{ key = "Q", id = "basket_load",  required = true },
+			{ key = "S", id = "basket_shake", required = true },
+			{ key = "W", id = "basket_lower", required = true },
+		},
 		fry = { cookTime = 4, perfect = 1.2, good = 2.5, burn = 5 },
 		tags = { "Hot", "Fried", "Greasy" },
 		workload = { dishLoad = 0, trashLoad = 2, greaseLoad = 3, messRisk = 1, prepTime = 1 },
