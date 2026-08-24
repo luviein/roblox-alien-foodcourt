@@ -32,9 +32,14 @@ SoundDefs.Sfx = {
 		pitchJitter = 0,
 	},
 
+	serveSuccess = {
+		id = 124743961969068,
+		volume = 0.75,
+		pitchJitter = 0.03,
+	},
+
 	-- Not sourced yet. Left at 0 so they no-op rather than erroring.
 	ticketArrive = { id = 0, volume = 0.6, pitchJitter = 0.04 },
-	serveSuccess = { id = 0, volume = 0.7, pitchJitter = 0.03 },
 	fumble       = { id = 0, volume = 0.4, pitchJitter = 0.05 },
 }
 
