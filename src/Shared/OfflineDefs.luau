@@ -181,6 +181,14 @@ function OfflineDefs.formatSpan(seconds: number): string
 	if hours > 0 then
 		return string.format("%dh %02dm", hours, minutes)
 	end
+
+	-- Seconds only matter below a minute, and only ever in the diagnostic log:
+	-- the collect screen cannot show a span shorter than one run. Worth having
+	-- because "away 0m" reads as a broken clock where "away 5s" reads as the
+	-- true answer -- you had only just restarted.
+	if totalMinutes < 1 then
+		return string.format("%ds", math.max(math.floor(seconds), 0))
+	end
 	return string.format("%dm", minutes)
 end
 

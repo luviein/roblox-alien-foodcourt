@@ -163,6 +163,9 @@ return function()
 	t:equal("hours and minutes", OfflineDefs.formatSpan(8 * HOUR), "8h 00m")
 	t:equal("minutes alone under an hour", OfflineDefs.formatSpan(14 * 60), "14m")
 	t:equal("a part hour", OfflineDefs.formatSpan(HOUR + 5 * 60), "1h 05m")
+	t:equal("seconds below a minute", OfflineDefs.formatSpan(5), "5s")
+	t:equal("nothing at all", OfflineDefs.formatSpan(0), "0s")
+	t:equal("a whole minute is minutes again", OfflineDefs.formatSpan(60), "1m")
 
 	-- ----------------------------------------------------- THE DESIGN RULE --
 
