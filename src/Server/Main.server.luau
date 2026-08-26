@@ -1,9 +1,21 @@
 --!strict
 -- Server entry point.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+
 local CustomerRigs = require(script.Parent.CustomerRigs)
 local DataService = require(script.Parent.DataService)
 local ShiftService = require(script.Parent.ShiftService)
+
+-- Tests run first, before anything can touch a profile, and only when debug
+-- commands are on. They cover the pure logic in Shared -- hype maths, daily
+-- tasks, boosts, the shop tables -- and nothing made of Instances, so a green
+-- run says the numbers are right, not that the game looks right.
+if Config.DEBUG_COMMANDS then
+	require(script.Parent.Tests.RunAll)()
+end
 
 -- Profiles first: a player can join before anything else is ready, and their
 -- save has to be loaded before a shift can pay into it.
