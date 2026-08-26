@@ -136,6 +136,102 @@ local function buildTopBar(parent: Instance)
 	return { frame = bar, score = score, time = timeLabel, timeFill = timeFill, combo = combo }
 end
 
+-- How busy the counter is right now, and which third of the day it belongs to.
+--
+-- Hype was until now completely invisible during service: it decided how often
+-- anyone walked in, and the player had no way to tell a quiet counter apart
+-- from a broken one. The bar reads against a FULL house rather than against
+-- the player's own base, so a new player sees a mostly empty track. That is
+-- the honest picture and it is the whole pitch for Word of Mouth.
+--
+-- Hype is recomputed per phase, so this changes at the two phase boundaries;
+-- the delta label calls out which way it went, because a menu that earns its
+-- keep only in the morning is otherwise impossible to notice.
+local function buildHypeMeter(parent: Instance)
+	local frame = make("Frame", {
+		Name = "HypeMeter",
+		BackgroundColor3 = COLOR.panel,
+		BackgroundTransparency = 0.25,
+		BorderSizePixel = 0,
+		Position = UDim2.fromScale(0.5, 0.098),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Size = UDim2.fromScale(0.24, 0.05),
+		Visible = false,
+	}, parent)
+	corner(frame, 8)
+
+	local phase = make("TextLabel", {
+		Name = "Phase",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.05, 0.06),
+		Size = UDim2.fromScale(0.5, 0.5),
+		Font = Enum.Font.GothamBold,
+		Text = "MORNING",
+		TextColor3 = COLOR.dim,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, frame)
+	make("UITextSizeConstraint", { MaxTextSize = 15 }, phase)
+
+	local value = make("TextLabel", {
+		Name = "Value",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.45, 0.06),
+		Size = UDim2.fromScale(0.5, 0.5),
+		Font = Enum.Font.GothamBold,
+		Text = "HYPE 30%",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Right,
+	}, frame)
+	make("UITextSizeConstraint", { MaxTextSize = 15 }, value)
+
+	local track = make("Frame", {
+		Name = "Track",
+		BackgroundColor3 = COLOR.bg,
+		BorderSizePixel = 0,
+		Position = UDim2.fromScale(0.05, 0.66),
+		Size = UDim2.fromScale(0.9, 0.16),
+	}, frame)
+	corner(track, 3)
+
+	local fill = make("Frame", {
+		Name = "Fill",
+		BackgroundColor3 = COLOR.accent,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(0.3, 1),
+	}, track)
+	corner(fill, 3)
+
+	-- Sits just under the meter and only appears at a phase boundary.
+	local delta = make("TextLabel", {
+		Name = "Delta",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0, 1.05),
+		Size = UDim2.fromScale(1, 0.7),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.good,
+		TextScaled = true,
+		TextTransparency = 1,
+		TextXAlignment = Enum.TextXAlignment.Right,
+	}, frame)
+	make("UITextSizeConstraint", { MaxTextSize = 15 }, delta)
+
+	return {
+		frame = frame,
+		phase = phase,
+		value = value,
+		fill = fill,
+		delta = delta,
+		-- Last rendered values, so a phase boundary can be spotted and named.
+		-- Declared here rather than assigned on first use so the shape of this
+		-- table is honest under --!strict.
+		lastPhase = nil :: string?,
+		lastHype = nil :: number?,
+	}
+end
+
 local function buildPlateReadout(parent: Instance)
 	local label = make("TextLabel", {
 		Name = "PlateReadout",
@@ -603,6 +699,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		prepTitle = prepTitle,
 		hint = hint,
 		topBar = buildTopBar(root),
+		hypeMeter = buildHypeMeter(root),
 		plateReadout = buildPlateReadout(prep),
 		searMeter = buildSearMeter(prep),
 		keyGrid = buildKeyGrid(prep, callbacks.onKey),
@@ -623,6 +720,52 @@ local IDLE_BODY = table.concat({
 	"",
 	"Build each order top to bottom, in the order listed on their ticket.",
 }, "\n")
+
+-- Declared above UI.render because that is the only thing that calls it, and a
+-- local declared below its caller resolves to nil at runtime.
+local function renderHype(meter, snapshot)
+	-- Between shifts there is no live counter to describe, and the draft screen
+	-- already shows the day's hype phase by phase.
+	if snapshot.state ~= "Service" or snapshot.hype == nil then
+		meter.frame.Visible = false
+		meter.lastPhase = nil
+		meter.lastHype = nil
+		return
+	end
+
+	meter.frame.Visible = true
+
+	local hype = snapshot.hype
+	local phase = snapshot.phase or ""
+
+	meter.phase.Text = string.upper(phase)
+	meter.value.Text = string.format("HYPE %d%%", math.floor(hype * 100 + 0.5))
+	meter.fill.Size = UDim2.fromScale(math.clamp(hype, 0, 1), 1)
+
+	-- Hype only moves at a phase boundary, so this fires twice a shift at most.
+	if meter.lastPhase and meter.lastPhase ~= phase and meter.lastHype then
+		local change = hype - meter.lastHype
+		if math.abs(change) >= 0.005 then
+			local up = change > 0
+			meter.delta.Text = string.format(
+				"%s%d%% %s",
+				(if up then "+" else "-"),
+				math.floor(math.abs(change) * 100 + 0.5),
+				(if up then "busier" else "quieter"))
+			meter.delta.TextColor3 = if up then COLOR.good else COLOR.warn
+			meter.delta.TextTransparency = 0
+
+			TweenService:Create(
+				meter.delta,
+				TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In, 0, false, 2.2),
+				{ TextTransparency = 1 }
+			):Play()
+		end
+	end
+
+	meter.lastPhase = phase
+	meter.lastHype = hype
+end
 
 function UI.render(refs, snapshot)
 	local state = snapshot.state
@@ -664,6 +807,8 @@ function UI.render(refs, snapshot)
 	refs.topBar.score.Text = string.format("%d c", snapshot.score)
 	refs.topBar.combo.Text = string.format("x%.2f", snapshot.comboMult)
 	refs.topBar.combo.TextColor3 = if snapshot.combo > 0 then COLOR.perfect else COLOR.dim
+
+	renderHype(refs.hypeMeter, snapshot)
 
 	-- Which order is selected drives the key labels and the plate readout.
 	local activeOrder = nil

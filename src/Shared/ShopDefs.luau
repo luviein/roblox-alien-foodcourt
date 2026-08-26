@@ -81,9 +81,14 @@ ShopDefs.Upgrades = {
 		-- shop: it makes you busier and richer at once, and never once makes the
 		-- cooking easier. Without it a player who never rebirths would work the
 		-- same quiet counter forever.
+		--
+		-- Widened from 0.05 when the opening hype floor went 0.15 -> 0.30. The
+		-- point of this upgrade is the RATIO it buys, not the number: five
+		-- levels used to take a counter from 0.15 to 0.40, and at 0.09 they now
+		-- take it from 0.30 to 0.75. Same climb, from a floor you can play on.
 		levels = { 700, 1800, 4000, 8500, 17000 },
 		baseValue = 0,
-		perLevel = 0.05,   -- +5 points of base hype per level
+		perLevel = 0.09,   -- +9 points of base hype per level
 	},
 
 	patience = {
