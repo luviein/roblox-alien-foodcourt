@@ -413,6 +413,16 @@ function DraftUI.build(playerGui: Instance, onConfirm: ({ string }) -> ())
 				table.insert(menu, dishId)
 			end
 		end
+
+		-- Refuse an empty menu here as well as greying the button. Setting
+		-- Active = false in render is what actually stops the click, but a
+		-- disabled look and a live handler is precisely the bug this had --
+		-- the button went grey and opened the restaurant anyway -- so the
+		-- handler checks the same condition rather than trusting the styling.
+		if #menu == 0 then
+			return
+		end
+
 		onConfirm(menu)
 	end)
 
@@ -602,7 +612,16 @@ function DraftUI.render(refs, profile)
 		else "Nothing on this menu stands out today."
 
 	refs.slotLabel.Text = string.format("%d / %d chosen", count, slots)
-	refs.confirm.BackgroundColor3 = if count > 0 then COLOR.good else COLOR.panelHi
+
+	-- Active is what actually refuses the click. Colour alone is a costume:
+	-- the button went grey with nothing drafted and opened the restaurant
+	-- anyway, because Activated still fired and the server quietly filled the
+	-- empty menu in from whatever was unlocked.
+	local ready = count > 0
+	refs.confirm.Active = ready
+	refs.confirm.AutoButtonColor = ready
+	refs.confirm.BackgroundColor3 = if ready then COLOR.good else COLOR.panelHi
+	refs.confirm.TextColor3 = if ready then COLOR.bg else COLOR.dim
 end
 
 return DraftUI

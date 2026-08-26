@@ -1248,6 +1248,11 @@ function renderDaily(panel, profile)
 
 			-- Three states, and the button says which: nothing to do yet, a
 			-- prize waiting, or already taken.
+			-- Active, not just colour. A greyed button whose handler still
+			-- fires is the bug the draft screen's OPEN UP had.
+			local claimable = task.complete and not task.claimed
+			row.claim.Active = claimable
+
 			if task.claimed then
 				row.claim.Text = "CLAIMED"
 				row.claim.BackgroundColor3 = COLOR.panel
@@ -1391,9 +1396,11 @@ function UI.render(refs, snapshot)
 	-- but the panel behind it closes: reading task progress mid-shift is not
 	-- something to offer with four tickets going.
 	local daily = snapshot.profile and snapshot.profile.daily
-	refs.dailyButton.enabled = state ~= "Service"
+	local railUsable = state ~= "Service"
+	refs.dailyButton.enabled = railUsable
+	refs.dailyButton.button.Active = railUsable
 	refs.dailyButton.button.BackgroundColor3 =
-		if state == "Service" then COLOR.bg else COLOR.panel
+		if railUsable then COLOR.panel else COLOR.bg
 
 	if state == "Service" then
 		refs.dailyPanel.shade.Visible = false
