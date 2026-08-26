@@ -122,6 +122,13 @@ local function grantBoost(effect: string, seconds: number?)
 	sendAction({ action = "grantBoost", effect = effect, seconds = seconds })
 end
 
+-- Testing: pretend the last few hours happened without you. The server rewinds
+-- this profile and settles the gap down the real return path, so the collect
+-- screen shows what a genuine absence would have shown.
+local function simulateAway(hours: number?)
+	sendAction({ action = "away", hours = hours })
+end
+
 -- Outside a shift, E opens the draft rather than starting immediately: the
 -- menu is the first decision of the day, not a detail to skip past. From the
 -- results screen it still just means "continue".
@@ -282,6 +289,11 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 	elseif keyCode == Enum.KeyCode.F8 then
 		grantBoost("tips")
 		return Enum.ContextActionResult.Sink
+	elseif keyCode == Enum.KeyCode.F6 then
+		-- A full night away. F6 rather than F9, which Studio takes for the
+		-- developer console.
+		simulateAway(8)
+		return Enum.ContextActionResult.Sink
 	end
 
 	-- E doubles as an ingredient key during service and as the start/continue
@@ -320,7 +332,7 @@ local BOUND_KEYS = {
 	Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.F, Enum.KeyCode.G,
 	Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,
 	Enum.KeyCode.Space, Enum.KeyCode.X, Enum.KeyCode.C,
-	Enum.KeyCode.Backspace, Enum.KeyCode.F7, Enum.KeyCode.F8,
+	Enum.KeyCode.Backspace, Enum.KeyCode.F6, Enum.KeyCode.F7, Enum.KeyCode.F8,
 }
 
 -- Sinking Space also stops the character jumping under the UI, which is what
@@ -355,6 +367,13 @@ if Config.DEBUG_COMMANDS then
 			-- Triggered passes (textSource, message), where message is the whole
 			-- line including the alias. Everything after it is the argument, so
 			-- "/boost tips 60" is a tip boost for a minute.
+			-- "/away 8" is eight hours. Fractions work, so "/away 0.5" is half
+			-- an hour, which is the quickest way to see a small report.
+			register("AwayCommand", "/away", "/a", function(_source, message)
+				local words = string.split(message or "", " ")
+				simulateAway(tonumber(words[2]))
+			end)
+
 			register("BoostCommand", "/boost", "/b", function(_source, message)
 				local words = string.split(message or "", " ")
 				local effect = words[2]

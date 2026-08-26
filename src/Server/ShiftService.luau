@@ -40,6 +40,50 @@ local function boostRunning(player: Player): boolean
 	return earnings > 0 or tips
 end
 
+-- What the understudy earned while the player was away, banked for collection.
+--
+-- Normally runs once, from onLoaded: that is the first moment the saved
+-- lastSeen can be read and the last moment before the next save overwrites it.
+-- The `away` debug command rewinds lastSeen and calls it again, so testing goes
+-- down this same path rather than a shortcut that could drift from it.
+--
+-- `force` is only ever passed by that command. It waives the temporary-profile
+-- guard, because Studio without API access is precisely where this needs
+-- testing and is also the one place every profile is temporary.
+local function settleOffline(player: Player, force: boolean?): boolean
+	local profile = DataService.get(player)
+	if not profile then
+		return false
+	end
+
+	-- A profile that has never been written has no away time to measure, which
+	-- covers a brand new player. A temporary profile is skipped for a sharper
+	-- reason: its real save could not be loaded, so paying it out would invent
+	-- cash against a profile we already know not to trust.
+	local lastSeen = profile.lastSeen or 0
+	if lastSeen <= 0 then
+		return false
+	end
+	if not force and DataService.isTemporary(player) then
+		return false
+	end
+
+	local away = os.time() - lastSeen
+	if away <= 0 then
+		return false
+	end
+
+	local report = OfflineDefs.accrue(profile, away)
+	if report.amount <= 0 then
+		return false
+	end
+
+	DataService.update(player, function(data)
+		OfflineDefs.addPending(data.pendingOffline, report)
+	end)
+	return true
+end
+
 -- Forward declared: pushSnapshot sends the day-s conditions along with every
 -- snapshot, and is defined above the roll that produces them.
 local conditionsFor
@@ -382,6 +426,33 @@ local function onStationAction(player: Player, payload: any)
 		pushSnapshot(player)
 		return
 
+	elseif action == "away" then
+		-- Testing. Rewinds the clock on this profile and settles the gap
+		-- exactly as a real return would, rather than fabricating a payout --
+		-- so what this produces is what a genuine absence produces.
+		if not Config.DEBUG_COMMANDS then
+			return
+		end
+
+		local hours = if typeof(payload.hours) == "number"
+			then math.clamp(payload.hours, 0.05, 48)
+			else 8
+
+		DataService.update(player, function(data)
+			data.lastSeen = os.time() - math.floor(hours * 3600)
+		end)
+
+		if not settleOffline(player, true) then
+			-- Silence here would look like a broken command, when it usually
+			-- means the profile simply has no recording to play back yet.
+			warn(("[AFC] /away earned %s nothing: the understudy copies your "
+				.. "last shifts, so finish one first (Backspace ends a shift).")
+				:format(player.Name))
+		end
+
+		pushSnapshot(player)
+		return
+
 	elseif action == "collectOffline" then
 		-- The amount was decided on load and has been sitting in the profile
 		-- since. Nothing about it is taken from the client here.
@@ -620,42 +691,6 @@ local function startTickLoop()
 				end
 			end
 		end
-	end)
-end
-
--- What the understudy earned while the player was away, banked for collection.
---
--- Runs once, from onLoaded, because that is the first moment the saved
--- lastSeen can be read and the last moment before the next save overwrites it.
--- Declared above ShiftService.start, which is where the closure that calls it
--- is built.
-local function settleOffline(player: Player)
-	local profile = DataService.get(player)
-	if not profile then
-		return
-	end
-
-	-- A profile that has never been written has no away time to measure, which
-	-- covers a brand new player. A temporary profile is skipped for a sharper
-	-- reason: its real save could not be loaded, so paying it out would invent
-	-- cash against a profile we already know not to trust.
-	local lastSeen = profile.lastSeen or 0
-	if lastSeen <= 0 or DataService.isTemporary(player) then
-		return
-	end
-
-	local away = os.time() - lastSeen
-	if away <= 0 then
-		return
-	end
-
-	local report = OfflineDefs.accrue(profile, away)
-	if report.amount <= 0 then
-		return
-	end
-
-	DataService.update(player, function(data)
-		OfflineDefs.addPending(data.pendingOffline, report)
 	end)
 end
 
