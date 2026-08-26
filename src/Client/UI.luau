@@ -35,6 +35,10 @@ local KEY_ROWS = {
 	{ "A", "S", "D", "F", "G" },
 }
 
+-- Side rail icons are square and measured in pixels, so they stay the same
+-- physical size whatever the screen is.
+local RAIL_ICON = 74
+
 -- ---------------------------------------------------------------- helpers --
 
 local function make(className: string, props: { [string]: any }, parent: Instance?): any
@@ -515,12 +519,14 @@ local function buildOverlay(parent: Instance, onStart: () -> ())
 	corner(shop, 8)
 	make("UITextSizeConstraint", { MaxTextSize = 18 }, shop)
 
+	-- Anchored to its own BOTTOM against a point above the screen edge, so the
+	-- label can never run off the bottom the way a top-anchored one did.
 	local cash = make("TextLabel", {
 		Name = "Cash",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.5, 0.975),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromScale(0.4, 0.045),
+		Position = UDim2.fromScale(0.5, 0.955),
+		AnchorPoint = Vector2.new(0.5, 1),
+		Size = UDim2.fromScale(0.4, 0.05),
 		Font = Enum.Font.GothamBold,
 		Text = "",
 		TextColor3 = COLOR.perfect,
@@ -546,11 +552,15 @@ end
 -- a shift as well as between them. It holds one button today; anything else
 -- that wants a permanent home on screen goes in the same column.
 local function buildSideRail(parent: Instance)
+	-- Sized in PIXELS, not scale. A scale width plus a UIAspectRatioConstraint
+	-- resolved to zero height inside the list layout and the whole rail
+	-- rendered as nothing. An icon rail wants to be the same physical size on
+	-- every screen anyway, which is what offset gives.
 	local rail = make("Frame", {
 		Name = "SideRail",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.012, 0.30),
-		Size = UDim2.fromScale(0.075, 0.4),
+		Position = UDim2.new(0, 14, 0.28, 0),
+		Size = UDim2.new(0, RAIL_ICON, 0, 420),
 		ZIndex = 12,
 	}, parent)
 
@@ -579,16 +589,11 @@ local function buildRailButton(parent: Instance, label: string, order: number)
 		AutoButtonColor = false,
 		Text = "",
 		LayoutOrder = order,
-		Size = UDim2.fromScale(1, 0),
+		Size = UDim2.fromOffset(RAIL_ICON, RAIL_ICON),
 		ZIndex = 12,
 	}, parent)
 	corner(button, 12)
 	stroke(button, COLOR.stroke, 2)
-
-	-- Square, whatever the screen does. Without this the rail's percentage
-	-- height makes the button a different shape on every device.
-	make("UIAspectRatioConstraint", { AspectRatio = 1 }, button)
-	make("UISizeConstraint", { MaxSize = Vector2.new(78, 78) }, button)
 
 	local sheet = make("Frame", {
 		Name = "Sheet",
@@ -676,11 +681,12 @@ local BOOST_ROWS = {
 }
 
 local function buildBoostStrip(parent: Instance)
+	-- Pinned in pixels under the rail, for the same reason the rail is.
 	local frame = make("Frame", {
 		Name = "Boosts",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.012, 0.72),
-		Size = UDim2.fromScale(0.19, 0.11),
+		Position = UDim2.new(0, 14, 0.28, RAIL_ICON + 14),
+		Size = UDim2.new(0, 190, 0, 62),
 		ZIndex = 12,
 	}, parent)
 
@@ -1198,6 +1204,17 @@ local IDLE_BODY = table.concat({
 -- challenge is a pure function of the date, so the client can work out what it
 -- is on its own. Only the player's own record has to come from the server.
 --
+-- Whether the daily panel is up. The keyboard needs to ask, because E means
+-- "start the day" outside a shift and must not fire straight through an open
+-- panel -- matching how the draft and the shop already behave.
+function UI.isDailyOpen(refs): boolean
+	return refs.dailyPanel.shade.Visible
+end
+
+function UI.setDailyOpen(refs, open: boolean)
+	refs.dailyPanel.shade.Visible = open
+end
+
 -- Assigned to the local forward declared near buildDailyPanel, above.
 function renderDaily(panel, profile)
 	if not profile then

@@ -51,10 +51,15 @@ local comboWasMaxed = false
 local draftMenu: { string } = {}
 
 -- Declared up here so every callback below closes over these locals rather
--- than over globals that do not exist yet. Both are assigned further down,
--- after the UI they depend on has been built.
+-- than over globals that do not exist yet. All three are assigned further
+-- down, after the UI they depend on has been built.
+--
+-- `refs` in particular: onStart is defined above UI.build but has to ask
+-- whether the daily panel is open, and a local declared after its reader
+-- resolves to a nil global at runtime rather than failing to compile.
 local shop
 local draft
+local refs
 
 -- ----------------------------------------------------------------- scene ---
 
@@ -108,6 +113,14 @@ local function onStart()
 	if not ready then
 		return
 	end
+
+	-- An open panel eats the key. Without this, E fires straight through the
+	-- daily panel and starts the day underneath it.
+	if UI.isDailyOpen(refs) then
+		UI.setDailyOpen(refs, false)
+		return
+	end
+
 	if snapshot and snapshot.state == "Idle" then
 		if DraftUI.isOpen(draft) then
 			DraftUI.setOpen(draft, false)
@@ -121,7 +134,7 @@ local function onStart()
 	Remotes.StartShift:FireServer(draftMenu)
 end
 
-local refs = UI.build(playerGui, {
+refs = UI.build(playerGui, {
 	onKey = onKey,
 	onServe = onServe,
 	onScrap = onScrap,
