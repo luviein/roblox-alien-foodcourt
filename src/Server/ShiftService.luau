@@ -863,7 +863,17 @@ function ShiftService.start()
 	-- It is also the first moment the saved lastSeen exists, which makes it the
 	-- only place the time away can be measured.
 	DataService.onLoaded = function(player: Player)
-		settleOffline(player)
+		-- The snapshot goes out whatever happens to the settling.
+		--
+		-- These ran in sequence, unprotected, and an error inside settleOffline
+		-- took the push down with it -- so the client sat on the profile-less
+		-- snapshot it got on join: no cash, no daily tasks, and no collect
+		-- screen even for earnings already banked and waiting. A bug in one
+		-- feature should not blank the rest of them.
+		local ok, err = pcall(settleOffline, player)
+		if not ok then
+			warn("[offline] settling failed for " .. player.Name .. ": " .. tostring(err))
+		end
 		pushSnapshot(player)
 	end
 

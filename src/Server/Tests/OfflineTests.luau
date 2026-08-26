@@ -99,6 +99,21 @@ return function()
 		math.abs(double.amount - full.amount * 2) <= 1,
 		string.format("%d vs %d", double.amount, full.amount * 2))
 
+	-- --------------------------------------------------------- every field --
+
+	-- Structural, and it earns its place: a refactor removed the local `hours`
+	-- while one line still read it, so accrue threw on nil arithmetic at the
+	-- very last statement -- after all the early returns, meaning it broke
+	-- exactly when it was about to pay out and never when it was not.
+	--
+	-- Checking the whole shape catches the next one of those without anyone
+	-- having to guess which field it will be.
+	local shape = OfflineDefs.accrue(player(), 3 * HOUR)
+	for _, field in { "seconds", "elapsed", "amount", "ran", "served", "left", "asked" } do
+		t:equal("report." .. field .. " is a number", typeof(shape[field]), "number")
+	end
+	t:equal("report.capped is a boolean", typeof(shape.capped), "boolean")
+
 	-- ------------------------------------------------------------ the story --
 
 	-- The collect screen has to be describing the payout, not decorating it.

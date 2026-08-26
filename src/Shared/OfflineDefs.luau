@@ -116,7 +116,8 @@ function OfflineDefs.accrue(profile, seconds: number)
 	-- FRACTIONAL on purpose. Flooring this first threw away up to one whole
 	-- shift of time every return, so being away an hour and a half paid the
 	-- same as an hour. `ran` is rounded for the report; the money is not.
-	local shifts = (counted / 3600) * Config.OFFLINE_SHIFTS_PER_HOUR
+	local hours = counted / 3600
+	local shifts = hours * Config.OFFLINE_SHIFTS_PER_HOUR
 	report.ran = math.max(1, math.floor(shifts + 0.5))
 
 	-- The impression is worth a fraction of the real thing, and the walkouts
