@@ -16,7 +16,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local ShopDefs = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ShopDefs"))
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local ShopDefs = require(Shared:WaitForChild("ShopDefs"))
 
 local DataService = {}
 
@@ -279,6 +281,9 @@ function DataService.save(player: Player): boolean
 	-- moment it was written. The gap between this and the next load is exactly
 	-- the time the understudy covered -- and because leaving, autosaving and
 	-- shutting down all come through here, there is no exit that forgets it.
+	--
+	-- The presence heartbeat in start() keeps it fresh BETWEEN writes, which is
+	-- what covers an exit that never happens at all.
 	profile.data.lastSeen = os.time()
 
 	local ok = attempt("save " .. player.Name, function()
@@ -359,6 +364,29 @@ function DataService.start()
 	Players.PlayerRemoving:Connect(function(player)
 		DataService.save(player)
 		profiles[player] = nil
+	end)
+
+	-- Presence heartbeat.
+	--
+	-- lastSeen is the stamp the understudy measures an absence from, so it has
+	-- to keep up while someone is ONLINE, not only when something happens to
+	-- save. Left to saves alone it goes stale during quiet stretches, and a
+	-- server that dies without a clean exit then leaves a stamp hours old --
+	-- so the player is paid offline earnings for an evening they spent playing.
+	--
+	-- Marking dirty rather than writing here: the write is still the autosave's
+	-- job, so this costs one extra DataStore write per player per autosave
+	-- window, not one per minute.
+	task.spawn(function()
+		while true do
+			task.wait(Config.PRESENCE_INTERVAL)
+			for _, profile in profiles do
+				if profile.canSave then
+					profile.data.lastSeen = os.time()
+					profile.dirty = true
+				end
+			end
+		end
 	end)
 
 	-- Autosave only what has actually changed.

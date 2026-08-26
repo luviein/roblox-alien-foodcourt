@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "offlinelog-50"
+Config.BUILD = "presence-51"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -197,6 +197,15 @@ Config.OFFLINE_RECENT_SHIFTS = 5
 Config.DEBUG_COMMANDS = true
 
 -- --------------------------------------------------------------- server ----
+-- How often a logged-in player's lastSeen stamp is refreshed.
+--
+-- This is the resolution of "when were you last here", and so the worst case
+-- of being paid offline earnings for time actually spent playing: a server
+-- that dies without a clean exit leaves a stamp up to this old. A minute is
+-- small enough that the leak is never worth more than two minutes of
+-- understudy pay, and long enough to cost nothing.
+Config.PRESENCE_INTERVAL = 60
+
 Config.TICK_RATE = 10              -- authoritative ticks per second
 Config.ACTION_RATE_LIMIT = 20      -- max client actions accepted per second
 
