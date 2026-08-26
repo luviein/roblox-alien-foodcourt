@@ -136,6 +136,12 @@ local function skipShift(count: number?)
 	sendAction({ action = "skipShift", count = count })
 end
 
+-- Testing: dump every input the understudy reads, to Output. Read-only, so it
+-- can be run mid-diagnosis without changing what is being diagnosed.
+local function offlineStatus()
+	sendAction({ action = "offlineStatus" })
+end
+
 -- Outside a shift, E opens the draft rather than starting immediately: the
 -- menu is the first decision of the day, not a detail to skip past. From the
 -- results screen it still just means "continue".
@@ -387,6 +393,8 @@ if Config.DEBUG_COMMANDS then
 
 			-- "/skip 5" banks five finished shifts, which is five days of the
 			-- staleness history and five contributions to the daily tasks.
+			register("OfflineStatusCommand", "/offline", nil, offlineStatus)
+
 			register("SkipCommand", "/skip", "/s", function(_source, message)
 				local words = string.split(message or "", " ")
 				skipShift(tonumber(words[2]))

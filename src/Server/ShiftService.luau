@@ -275,12 +275,18 @@ end
 -- screen redraw would let a player reroll the weather by closing and reopening
 -- it until they liked what they saw.
 function conditionsFor(player: Player)
+	local profile = DataService.get(player)
+
 	local existing = dayConditions[player]
 	if existing then
+		-- Only the WEATHER has to be frozen -- that is what stops a player
+		-- rerolling it by closing and reopening the draft. The day is just a
+		-- label and is read live, so it corrects itself the moment the profile
+		-- arrives rather than staying wrong for the session.
+		existing.day = (profile and profile.day) or existing.day
 		return existing
 	end
 
-	local profile = DataService.get(player)
 	local rng = Random.new()
 	local weather = HypeDefs.rollWeather(rng)
 
@@ -290,7 +296,14 @@ function conditionsFor(player: Player)
 		weatherName = weather.name,
 		weatherBlurb = weather.blurb,
 	}
-	dayConditions[player] = conditions
+
+	-- Not remembered until there IS a profile. The first snapshot goes out on
+	-- join, before the save has loaded, and caching then froze "DAY 1" over a
+	-- returning player's real day for the whole session -- along with a weather
+	-- roll made before anyone could see it.
+	if profile then
+		dayConditions[player] = conditions
+	end
 	return conditions
 end
 
@@ -561,6 +574,47 @@ local function onStationAction(player: Player, payload: any)
 
 		kitchen:drainEvents()
 		pushSnapshot(player)
+		return
+
+	elseif action == "offlineStatus" then
+		-- Read-only. Prints every input the understudy reads, so a return that
+		-- paid nothing can be diagnosed without leaving and coming back to
+		-- reproduce it.
+		if not Config.DEBUG_COMMANDS then
+			return
+		end
+
+		local profile = DataService.get(player)
+		if not profile then
+			warn("[offline] no profile loaded")
+			return
+		end
+
+		local lastSeen = profile.lastSeen or 0
+		local away = if lastSeen > 0 then os.time() - lastSeen else -1
+		local perShift = OfflineDefs.perShift(profile.recentEarnings)
+		local pending = profile.pendingOffline or {}
+
+		print(("[offline] ---- %s ----"):format(player.Name))
+		print(("  profile        %s"):format(
+			if DataService.isTemporary(player)
+				then "TEMPORARY (will never pay out or save lastSeen)"
+				else "saving normally"))
+		print(("  lastSeen       %s"):format(
+			if lastSeen > 0
+				then ("%d, %s ago"):format(lastSeen, OfflineDefs.formatSpan(math.max(away, 0)))
+				else "never written -- nothing to measure from yet"))
+		print(("  recent shifts  %s  (average %d c)"):format(
+			table.concat(profile.recentEarnings or {}, ", "), math.floor(perShift)))
+		print(("  one run needs  %s"):format(
+			OfflineDefs.formatSpan(OfflineDefs.secondsPerShift())))
+		print(("  cell holds     %d hours"):format(OfflineDefs.capHours(profile)))
+		print(("  waiting now    %d c"):format(pending.amount or 0))
+
+		if away > 0 then
+			local would = OfflineDefs.accrue(profile, away)
+			print(("  that gap pays  %d c"):format(would.amount))
+		end
 		return
 
 	elseif action == "away" then
