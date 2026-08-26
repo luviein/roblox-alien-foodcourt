@@ -398,6 +398,11 @@ function DraftUI.build(playerGui: Instance, onConfirm: ({ string }) -> ())
 		slotLabel = slotLabel,
 		confirm = confirm,
 		selected = {},          -- dishId -> true
+
+		-- The most recent profile handed to render. Row click handlers read
+		-- this rather than closing over one, since they outlive it. Declared
+		-- here so the shape of this table is honest under --!strict.
+		lastProfile = nil :: any,
 	}
 
 	-- Backing out without opening up: the draft is a decision, and a decision
@@ -467,6 +472,13 @@ function DraftUI.render(refs, profile)
 		return
 	end
 
+	-- Kept for the row click handlers below. They are wired once, on the render
+	-- that first builds their row, and must NOT close over the profile that
+	-- render happened to be holding: rows outlive it, so a click days later
+	-- redrew the whole screen from a frozen profile and the day counter and
+	-- weather flipped back and forth between the two.
+	refs.lastProfile = profile
+
 	local conditions = profile.conditions or {}
 	local slots = profile.menuSlots or 3
 
@@ -490,12 +502,19 @@ function DraftUI.render(refs, profile)
 		local row = refs.dishRows[dishId]
 		if not row then
 			row = buildDishRow(refs.dishList, order, function()
+				-- Everything here reads the CURRENT profile, never the one
+				-- this row was built with. The slot limit too: menuSlots can
+				-- change between shifts, and a row wired on day one would
+				-- otherwise enforce day one's limit forever.
+				local current = refs.lastProfile
+				local limit = (current and current.menuSlots) or 3
+
 				if refs.selected[dishId] then
 					refs.selected[dishId] = nil
-				elseif DraftUI.count(refs) < slots then
+				elseif DraftUI.count(refs) < limit then
 					refs.selected[dishId] = true
 				end
-				DraftUI.render(refs, profile)
+				DraftUI.render(refs, current)
 			end)
 			refs.dishRows[dishId] = row
 		end
