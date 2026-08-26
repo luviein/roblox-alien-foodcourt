@@ -156,6 +156,13 @@ function Kitchen:endShiftNow()
 		return
 	end
 	self.shiftEndsAt = now()
+
+	-- Also sends everyone still waiting home. Without this the shift would sit
+	-- in last orders for up to a full patience after the command, which is the
+	-- opposite of what a "end this now" command is for. They are dropped
+	-- rather than counted as walkouts: this is a testing exit, and it should
+	-- not quietly stain the stats it exists to let you look at.
+	self.orders = {}
 end
 
 function Kitchen:progress(): number
@@ -661,13 +668,29 @@ function Kitchen:tick()
 
 	interval /= math.max(self.hype, 0.01)
 
-	if t >= self.nextSpawnAt and #self.orders < math.min(maxActive, self.loadout.orderSlots) then
+	-- Last orders. Nobody new comes in once the clock runs out -- but see the
+	-- end-of-service note below for what happens to whoever is already here.
+	if t < self.shiftEndsAt
+		and t >= self.nextSpawnAt
+		and #self.orders < math.min(maxActive, self.loadout.orderSlots)
+	then
 		self:spawnOrder()
 		self.nextSpawnAt = t + interval
 	end
 
-	-- End of service.
-	if t >= self.shiftEndsAt then
+	-- End of service, once the counter is actually clear.
+	--
+	-- The clock running out used to end the shift on the spot and discard
+	-- every ticket still standing there, so a customer who walked in on the
+	-- last second vanished -- not served, not even counted as a walkout, just
+	-- gone. Anyone already at the counter now gets their full patience to be
+	-- served, exactly like any other customer.
+	--
+	-- This cannot run long: patience ticks down through overtime the same as
+	-- ever and the walk-out loop above removes them when it expires, so the
+	-- most this can add is one order's patience, and only if the player stops
+	-- serving entirely.
+	if t >= self.shiftEndsAt and #self.orders == 0 then
 		self.state = "Results"
 		self.orders = {}
 		self.activeOrderId = nil

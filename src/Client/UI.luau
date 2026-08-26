@@ -1581,10 +1581,21 @@ function UI.renderTimers(refs, snapshot)
 		refs.chore.fill.Size = UDim2.fromScale(left, 1)
 	end
 
-	refs.topBar.time.Text = formatTime(remaining)
-	refs.topBar.timeFill.Size = UDim2.fromScale(
-		math.clamp(remaining / snapshot.shiftDuration, 0, 1), 1
-	)
+	-- Past the bell the shift keeps running until whoever is already at the
+	-- counter has been dealt with. Saying LAST ORDERS is the difference
+	-- between "the game is finishing up" and a clock stuck on 0:00, which
+	-- reads as the thing having hung.
+	if snapshot.state == "Service" and remaining <= 0 then
+		refs.topBar.time.Text = "LAST ORDERS"
+		refs.topBar.time.TextColor3 = COLOR.warn
+		refs.topBar.timeFill.Size = UDim2.fromScale(0, 1)
+	else
+		refs.topBar.time.Text = formatTime(remaining)
+		refs.topBar.time.TextColor3 = COLOR.text
+		refs.topBar.timeFill.Size = UDim2.fromScale(
+			math.clamp(remaining / snapshot.shiftDuration, 0, 1), 1
+		)
+	end
 
 	-- The fry prompt counts down every frame rather than every snapshot: a
 	-- timer that visibly stutters is worse than no timer. render() leaves this
