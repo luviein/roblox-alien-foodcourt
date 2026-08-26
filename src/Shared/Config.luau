@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "cellfull-53"
+Config.BUILD = "realtest-54"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -189,12 +189,25 @@ Config.OFFLINE_WALKOUT_RATE = 0.31
 Config.OFFLINE_RECENT_SHIFTS = 5
 
 -- ---------------------------------------------------------------- debug ----
--- Testing conveniences. TURN THIS OFF BEFORE RELEASE -- it lets a client end
--- its own shift early, which pays out exactly as if the clock had run down.
+-- Two flags, because they are wanted at different times.
 --
--- One flag rather than one per command, so shipping is a single edit and
--- there is no chance of leaving one of them on by accident.
+-- DEBUG_COMMANDS is the cheats: end a shift, skip one, grant a boost, rewind
+-- the clock. They CHANGE STATE, so they have to be off to test the game the
+-- way a player meets it -- an eight hour absence you asked for is not evidence
+-- that an eight hour absence works.
+--
+-- TURN THIS OFF BEFORE RELEASE. One flag for the lot, so shipping is a single
+-- edit with no chance of leaving one on by accident.
 Config.DEBUG_COMMANDS = true
+
+-- DEBUG_LOGGING is the Output noise: the startup test suite, and the reason
+-- the understudy paid nothing. None of it touches gameplay and no player ever
+-- sees it, so it stays ON through a realistic playtest -- a silent failure
+-- during one teaches nothing, which is the whole reason these exist.
+--
+-- The read-only /offline command lives here too, for the same reason: it
+-- reports state without changing any.
+Config.DEBUG_LOGGING = true
 
 -- --------------------------------------------------------------- server ----
 -- How often a logged-in player's lastSeen stamp is refreshed.

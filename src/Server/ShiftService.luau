@@ -105,12 +105,14 @@ end
 -- guard, because Studio without API access is precisely where this needs
 -- testing and is also the one place every profile is temporary.
 local function settleOffline(player: Player, force: boolean?): boolean
-	-- Every way this can decline says so out loud while debug commands are on.
-	-- It used to return silently from five different places, which made "no
-	-- report appeared" indistinguishable from "the feature is broken" -- and
-	-- the commonest causes are environmental rather than bugs.
+	-- Every way this can decline says so out loud while debug LOGGING is on --
+	-- which is deliberately a separate flag from the cheats, so the reasons
+	-- survive a playtest run the way a player would run it. It used to return
+	-- silently from five different places, which made "no report appeared"
+	-- indistinguishable from "the feature is broken", and the commonest causes
+	-- are environmental rather than bugs.
 	local function decline(reason: string): boolean
-		if Config.DEBUG_COMMANDS then
+		if Config.DEBUG_LOGGING then
 			warn(("[offline] nothing for %s: %s"):format(player.Name, reason))
 		end
 		return false
@@ -151,7 +153,7 @@ local function settleOffline(player: Player, force: boolean?): boolean
 		local perShift = OfflineDefs.perShift(profile.recentEarnings)
 		local detail = if perShift <= 0
 			then "no finished shifts on record, so there is no recording to play "
-				.. "back. Bank one with /skip."
+				.. "back. Play a shift through to the results screen first."
 			else ("under the %s minimum for one run."):format(
 				OfflineDefs.formatSpan(OfflineDefs.secondsPerShift()))
 
@@ -163,7 +165,7 @@ local function settleOffline(player: Player, force: boolean?): boolean
 		OfflineDefs.addPending(data.pendingOffline, report)
 	end)
 
-	if Config.DEBUG_COMMANDS then
+	if Config.DEBUG_LOGGING then
 		print(("[offline] %s was away %s: %d c banked"):format(
 			player.Name, OfflineDefs.formatSpan(report.seconds), report.amount))
 	end
@@ -580,7 +582,11 @@ local function onStationAction(player: Player, payload: any)
 		-- Read-only. Prints every input the understudy reads, so a return that
 		-- paid nothing can be diagnosed without leaving and coming back to
 		-- reproduce it.
-		if not Config.DEBUG_COMMANDS then
+		--
+		-- Gated on LOGGING rather than COMMANDS, so it survives a realistic
+		-- playtest with the cheats switched off -- which is exactly the run
+		-- where a silent failure is most expensive and least reproducible.
+		if not Config.DEBUG_LOGGING then
 			return
 		end
 

@@ -1,7 +1,7 @@
 --!strict
 -- Runs every suite and prints one summary.
 --
--- Called from Main.server only when Config.DEBUG_COMMANDS is on, so a release
+-- Called from Main.server only when Config.DEBUG_LOGGING is on, so a release
 -- build neither runs them nor pays to require them.
 
 local Runner = require(script.Parent.Runner)

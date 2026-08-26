@@ -296,20 +296,25 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 	-- Testing: F7 and F8 start a boost. Function keys because they collide with
 	-- nothing, in or out of a shift, so they work on either screen. The server
 	-- ignores both unless Config.DEBUG_COMMANDS is on.
-	if keyCode == Enum.KeyCode.F7 then
-		grantBoost("earnings")
-		return Enum.ContextActionResult.Sink
-	elseif keyCode == Enum.KeyCode.F8 then
-		grantBoost("tips")
-		return Enum.ContextActionResult.Sink
-	elseif keyCode == Enum.KeyCode.F6 then
-		-- A full night away. F6 rather than F9, which Studio takes for the
-		-- developer console.
-		simulateAway(8)
-		return Enum.ContextActionResult.Sink
-	elseif keyCode == Enum.KeyCode.F5 then
-		skipShift(1)
-		return Enum.ContextActionResult.Sink
+	-- Testing keys. Checked client-side as well as server-side so that a
+	-- playtest run with the cheats off is genuinely untouched by them, rather
+	-- than quietly firing remotes the server throws away.
+	if Config.DEBUG_COMMANDS then
+		if keyCode == Enum.KeyCode.F7 then
+			grantBoost("earnings")
+			return Enum.ContextActionResult.Sink
+		elseif keyCode == Enum.KeyCode.F8 then
+			grantBoost("tips")
+			return Enum.ContextActionResult.Sink
+		elseif keyCode == Enum.KeyCode.F6 then
+			-- A full night away. F6 rather than F9, which Studio takes for the
+			-- developer console.
+			simulateAway(8)
+			return Enum.ContextActionResult.Sink
+		elseif keyCode == Enum.KeyCode.F5 then
+			skipShift(1)
+			return Enum.ContextActionResult.Sink
+		end
 	end
 
 	-- E doubles as an ingredient key during service and as the start/continue
@@ -363,7 +368,7 @@ ContextActionService:BindAction("AFC_Input", handleInput, false, table.unpack(BO
 -- current TextChatService. A place still on the legacy chat would throw here,
 -- and a debug convenience must never be the thing that stops the client
 -- booting. Backspace still works either way.
-if Config.DEBUG_COMMANDS then
+if Config.DEBUG_COMMANDS or Config.DEBUG_LOGGING then
 	task.spawn(function()
 		local ok, err = pcall(function()
 			local TextChatService = game:GetService("TextChatService")
@@ -377,6 +382,16 @@ if Config.DEBUG_COMMANDS then
 				end
 				command.Triggered:Connect(run)
 				command.Parent = TextChatService
+			end
+
+			-- Read-only, so it belongs with the logging rather than the cheats
+			-- and survives a playtest run with the cheats switched off.
+			if Config.DEBUG_LOGGING then
+				register("OfflineStatusCommand", "/offline", nil, offlineStatus)
+			end
+
+			if not Config.DEBUG_COMMANDS then
+				return
 			end
 
 			register("EndShiftCommand", "/endshift", "/es", endShiftNow)
@@ -393,8 +408,6 @@ if Config.DEBUG_COMMANDS then
 
 			-- "/skip 5" banks five finished shifts, which is five days of the
 			-- staleness history and five contributions to the daily tasks.
-			register("OfflineStatusCommand", "/offline", nil, offlineStatus)
-
 			register("SkipCommand", "/skip", "/s", function(_source, message)
 				local words = string.split(message or "", " ")
 				skipShift(tonumber(words[2]))
