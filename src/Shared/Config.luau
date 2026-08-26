@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "hypemeter-33"
+Config.BUILD = "noword-34"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -30,8 +30,8 @@ Config.MAX_ACTIVE_ORDERS = {
 -- Seconds between customers AT FULL HYPE (1.00). The real interval is this
 -- divided by current hype.
 --
--- At the 0.30 a new player opens on, these work out to 12s, 9s and 7s: about
--- ten customers across the first shift. You cook, you get a couple of seconds,
+-- At the 0.25 a new player opens on, these work out to 14s, 11s and 8s: about
+-- eight customers across the first shift. You cook, you get a couple of seconds,
 -- then the next one is at the counter. At a full house they are 3.6s, 2.7s and
 -- 2.1s -- roughly 34 in a shift, which four order slots can only just contain.
 --
@@ -40,7 +40,7 @@ Config.MAX_ACTIVE_ORDERS = {
 --
 -- The floor was raised from 0.15 because five customers in ninety seconds read
 -- as broken rather than quiet -- most of the shift was spent standing still.
--- Word of Mouth was widened to match, so the CLIMB is the size it always was.
+-- Word of Mouth is gone, so the menu is now the only thing that moves it.
 Config.SPAWN_INTERVAL = {
 	{ 0.00, 3.6 },
 	{ 0.30, 2.7 },
@@ -82,21 +82,34 @@ Config.COMBO_MAX = 3.0             -- multiplier ceiling
 -- Keeping the score number big and the cash number small is deliberate: the
 -- shift should feel good to finish and the unlock should still feel earned.
 -- This tracks the customer count. At five customers a shift it had to sit at
--- 0.60 or the opening days paid nothing; now that a first shift is ten, it
--- comes back down. Score more than doubled -- a longer queue also keeps the
--- combo alive -- so the rate drops by more than half to hold the unlock pace
--- at roughly two shifts for fries. This is the knob to turn if unlocks feel
--- too fast or slow: it moves the economy without touching difficulty.
+-- 0.60 or the opening days paid nothing; at roughly eight it comes back down,
+-- because a longer queue also keeps the combo alive and score climbs faster
+-- than the headcount does.
+--
+-- Where that lands: about 180 c for a first shift, against fries at 250, so
+-- the first unlock is a day and a half of play. This is the knob to turn if
+-- unlocks feel too fast or slow -- it moves the economy without touching
+-- difficulty, and the dish costs in ShopDefs are the other half of the same
+-- dial.
 Config.CASH_PER_POINT = 0.25
 
 -- ---------------------------------------------------------------- hype -----
 -- Hype is how busy your counter is, as a fraction of a full house. Nobody has
--- heard of you yet, so you open at 30% -- a thin queue with real gaps in it,
+-- heard of you yet, so you open at 25% -- a thin queue with real gaps in it,
 -- but never an empty counter. Everything you do from there raises it.
 --
--- This is the floor of the whole game's pacing. Lower and the opening shifts go
--- dead; higher and Word of Mouth has nothing left to sell you.
-Config.BASE_HYPE = 0.30
+-- This is the floor of the whole game's pacing, and with Word of Mouth gone it
+-- is also the CENTRE of it: a menu can only swing hype between 0.60x and 1.35x
+-- of this number, so the whole pre-rebirth range is 0.15 to 0.34 -- roughly
+-- five customers for a badly drafted day and eleven for a well drafted one.
+--
+-- Eleven is deliberate. One measured shift put a player's serve ceiling at
+-- about one order every eight seconds, so eleven is all anyone can physically
+-- cook in ninety seconds. Setting the base so a PERFECT draft lands on that
+-- ceiling is what makes drafting worth doing: any higher and the top of the
+-- menu range buys customers who only walk out, which is exactly the flaw that
+-- got Word of Mouth removed.
+Config.BASE_HYPE = 0.25
 
 -- Each rebirth is worth two more points of base hype, so a rebirthed player
 -- works a permanently busier counter than a fresh one.

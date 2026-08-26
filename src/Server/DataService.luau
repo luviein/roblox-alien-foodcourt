@@ -13,7 +13,10 @@
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+
+local ShopDefs = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ShopDefs"))
 
 local DataService = {}
 
@@ -110,6 +113,36 @@ local function reconcile(saved, template)
 	return saved
 end
 
+-- Cash back for upgrades that no longer exist.
+--
+-- Word of Mouth was removed after it turned out to sell customer arrivals well
+-- past the rate anyone can actually cook at. Players who bought it are refunded
+-- at full price rather than quietly losing the cash: this runs once per load,
+-- and clearing the owned levels is what stops it paying out twice.
+--
+-- Declared above loadProfile because that is what calls it.
+local function refundRetired(data)
+	if typeof(data) ~= "table" or typeof(data.upgrades) ~= "table" then
+		return 0
+	end
+
+	local refunded = 0
+	for upgradeId in ShopDefs.RetiredUpgrades do
+		local owned = data.upgrades[upgradeId]
+		if typeof(owned) == "number" and owned > 0 then
+			refunded += ShopDefs.refundValue(upgradeId, owned)
+		end
+		-- Cleared whether or not it paid out, so a stale key cannot linger and
+		-- cannot be refunded a second time on the next load.
+		data.upgrades[upgradeId] = nil
+	end
+
+	if refunded > 0 then
+		data.cash = (data.cash or 0) + refunded
+	end
+	return refunded
+end
+
 local function keyFor(player: Player): string
 	return "p_" .. tostring(player.UserId)
 end
@@ -181,7 +214,16 @@ local function loadProfile(player: Player): Profile
 
 	-- nil simply means a new player.
 	local data = reconcile(saved or {}, DEFAULT)
-	return { data = data, canSave = true, dirty = false }
+
+	-- Marked dirty when it pays out, so the refund is written back even if the
+	-- player quits before anything else changes.
+	local refunded = refundRetired(data)
+	if refunded > 0 then
+		print(("[DataService] refunded %d c to %s for retired upgrades")
+			:format(refunded, player.Name))
+	end
+
+	return { data = data, canSave = true, dirty = refunded > 0 }
 end
 
 -- ------------------------------------------------------------------ save --

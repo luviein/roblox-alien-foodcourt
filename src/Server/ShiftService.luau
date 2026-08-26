@@ -185,10 +185,11 @@ local function loadoutFor(player: Player, chosen: { string }?)
 	local stale = HypeDefs.staleSet(profile and profile.recentMenus)
 	local upgrades = (profile and profile.upgrades) or {}
 
-	-- Word of Mouth is bought; rebirths are earned. Both permanently raise where
-	-- a neutral menu sits, which is what turns a quiet counter into a queue.
+	-- Where a neutral menu sits. Nothing in the shop moves this any more -- the
+	-- only permanent lift is rebirths, which are earned. Everything else about
+	-- how busy the counter gets comes out of the DRAFT: dish tags paying off in
+	-- the phase and weather that suit them.
 	local baseHype = Config.BASE_HYPE
-		+ ShopDefs.valueOf("word", upgrades.word or 0)
 		+ Config.REBIRTH_HYPE_STEP * ((profile and profile.rebirths) or 0)
 
 	local hypeByPhase = {}

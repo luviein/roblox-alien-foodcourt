@@ -29,25 +29,36 @@ ShopDefs.DishOrder = {
 	"six_yolk_omelette",
 }
 
+-- Roughly halved when Word of Mouth was removed. Dishes are now the ONLY thing
+-- that raises customer flow before a rebirth -- a dish with the right tag is
+-- worth +5% hype in the phase or weather it suits -- so the curve has to be
+-- something a player climbs steadily rather than saves up for. The old curve
+-- topped out at 47,000, which was priced for a player who also had five levels
+-- of Word of Mouth pushing their earnings up. Nobody has that now.
+--
+-- The shape is unchanged: new VERBS come early. Fries introduce the fryer and
+-- steak the grill, both ahead of the cheaper assembly dishes, because the first
+-- half of the curve should pay out in new things to do rather than more of the
+-- same thing.
 ShopDefs.DishCost = {
-	fries             = 400,     -- unlocks the fryer
-	hotdog            = 900,
-	steak             = 1500,    -- unlocks the grill
-	grilled_cheese    = 2600,
-	taco              = 4000,
-	onion_rings       = 6000,
-	pancakes          = 8500,
-	club_sandwich     = 11000,
-	breakfast_burrito = 14000,
-	tempura_veg       = 18000,
+	fries             = 250,     -- unlocks the fryer
+	hotdog            = 500,
+	steak             = 850,     -- unlocks the grill
+	grilled_cheese    = 1400,
+	taco              = 2100,
+	onion_rings       = 3000,
+	pancakes          = 4200,
+	club_sandwich     = 5600,
+	breakfast_burrito = 7200,
+	tempura_veg       = 9000,
 
 	-- Cooked with what the station has rather than what Earth sent. These are
 	-- harder as well as dearer: a reward that is only a bigger number stops
 	-- being interesting the moment you own it.
-	ramen             = 23000,
-	gloom_spuds       = 29000,
-	quivvern_flank    = 37000,
-	six_yolk_omelette = 47000,
+	ramen             = 11500,
+	gloom_spuds       = 14500,
+	quivvern_flank    = 18000,
+	six_yolk_omelette = 23000,
 }
 
 -- Permanent upgrades. `levels` is a list of costs; buying level N costs
@@ -73,23 +84,23 @@ ShopDefs.Upgrades = {
 		perLevel = 0.04,   -- +4% cash per level
 	},
 
-	word = {
-		id = "word",
-		name = "Word of Mouth",
-		blurb = "The station hears about you. Customers arrive noticeably faster.",
-		-- The main growth lever, and the purest raise-the-ceiling upgrade in the
-		-- shop: it makes you busier and richer at once, and never once makes the
-		-- cooking easier. Without it a player who never rebirths would work the
-		-- same quiet counter forever.
-		--
-		-- Widened from 0.05 when the opening hype floor went 0.15 -> 0.30. The
-		-- point of this upgrade is the RATIO it buys, not the number: five
-		-- levels used to take a counter from 0.15 to 0.40, and at 0.09 they now
-		-- take it from 0.30 to 0.75. Same climb, from a floor you can play on.
-		levels = { 700, 1800, 4000, 8500, 17000 },
-		baseValue = 0,
-		perLevel = 0.09,   -- +9 points of base hype per level
-	},
+	-- Word of Mouth used to live here: five levels of permanently higher base
+	-- hype. It was removed, and the reason is worth keeping.
+	--
+	-- Hype only controls how fast customers ARRIVE. It cannot make you cook
+	-- faster, and one measured shift put that ceiling at roughly one order
+	-- every eight seconds -- about eleven in a ninety second day. Word of Mouth
+	-- sold arrivals well past that point, so its last levels bought nothing but
+	-- customers who walked out. An upgrade whose top half is dead is worse than
+	-- no upgrade at all, because it reads as progress.
+	--
+	-- Customer flow is now sourced entirely from hype the player EARNS: dish
+	-- tags that pay off in the right phase and the right weather, and base hype
+	-- from rebirths. That makes unlocking dishes the growth lever, and drafting
+	-- them well the skill -- which is the point of the dish system.
+	--
+	-- Flyers (a per-day, randomly rolled +10-30%, bought fresh each morning and
+	-- unlocked at rebirth 1) are the planned replacement. See PLAN-flyers.md.
 
 	patience = {
 		id = "patience",
@@ -116,7 +127,28 @@ ShopDefs.Upgrades = {
 	},
 }
 
-ShopDefs.UpgradeOrder = { "word", "slots", "patience", "tips", "shift" }
+ShopDefs.UpgradeOrder = { "slots", "patience", "tips", "shift" }
+
+-- Upgrades that no longer exist. Any levels a player already bought are
+-- refunded at full price on their next load, because taking away something
+-- someone paid for and saying nothing is the one thing a shop must never do.
+ShopDefs.RetiredUpgrades = {
+	word = { 700, 1800, 4000, 8500, 17000 },
+}
+
+-- What a retired upgrade's owned levels are worth back.
+function ShopDefs.refundValue(upgradeId: string, ownedLevels: number): number
+	local levels = ShopDefs.RetiredUpgrades[upgradeId]
+	if not levels then
+		return 0
+	end
+
+	local total = 0
+	for index = 1, math.min(ownedLevels, #levels) do
+		total += levels[index]
+	end
+	return total
+end
 
 -- ------------------------------------------------------------------ query --
 

@@ -547,10 +547,15 @@ function DraftUI.render(refs, profile)
 	-- Where a neutral menu sits for this player. Rebirths raise it, so the bar
 	-- is drawn against their own baseline rather than a fixed 100%.
 	local base = Config.BASE_HYPE
-		+ ShopDefs.valueOf("word", (profile.upgrades and profile.upgrades.word) or 0)
 		+ Config.REBIRTH_HYPE_STEP * (profile.rebirths or 0)
-	local lo = math.max(base - HypeDefs.SWING_DOWN, HypeDefs.MIN)
-	local hi = math.min(base + HypeDefs.SWING_UP, HypeDefs.MAX)
+
+	-- The ends of the bar are the best and worst a menu can do, and they are
+	-- the SAME bounds the server clamps to in HypeDefs.evaluate. SWING_DOWN and
+	-- SWING_UP are multipliers, not offsets: subtracting them drew the scale as
+	-- 5%-100% whatever the menu did, so the fill barely twitched and a good
+	-- draft looked like it had achieved nothing.
+	local lo = math.max(base * HypeDefs.SWING_DOWN, HypeDefs.MIN)
+	local hi = math.min(base * HypeDefs.SWING_UP, HypeDefs.MAX)
 
 	local allReasons = {}
 	for _, phase in HypeDefs.Phases do
