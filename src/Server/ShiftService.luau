@@ -16,6 +16,7 @@ local ShopDefs = require(Shared.ShopDefs)
 local HypeDefs = require(Shared.HypeDefs)
 local DishDefs = require(Shared.DishDefs)
 local DailyDefs = require(Shared.DailyDefs)
+local OfflineDefs = require(Shared.OfflineDefs)
 
 -- The only keys the station will ever accept. Anything else is dropped
 -- before it reaches gameplay code.
@@ -110,6 +111,10 @@ local function pushSnapshot(player: Player)
 			-- Running boosts, so the HUD can show what is active and how long
 			-- is left on it.
 			boosts = profile.boosts,
+
+			-- What the understudy banked while they were away, waiting to be
+			-- collected. Zero means the collect screen stays shut.
+			pendingOffline = profile.pendingOffline,
 		}
 	end
 
@@ -377,6 +382,25 @@ local function onStationAction(player: Player, payload: any)
 		pushSnapshot(player)
 		return
 
+	elseif action == "collectOffline" then
+		-- The amount was decided on load and has been sitting in the profile
+		-- since. Nothing about it is taken from the client here.
+		local collected = 0
+		DataService.update(player, function(data)
+			local pending = data.pendingOffline
+			collected = pending.amount or 0
+			if collected > 0 then
+				data.cash += collected
+				OfflineDefs.clearPending(pending)
+			end
+		end)
+
+		if collected > 0 then
+			DataService.save(player)
+		end
+		pushSnapshot(player)
+		return
+
 	elseif action == "claimDaily" then
 		-- Claiming a finished daily task. The index is the only thing the
 		-- client sends; everything about whether it is claimable, and what it
@@ -556,6 +580,14 @@ local function startTickLoop()
 						data.stats.bestScore = math.max(data.stats.bestScore, kitchen.score)
 						data.day += 1
 
+						-- Newest first, trimmed. This average is what the
+						-- understudy is paid a fraction of, so it has to be
+						-- recorded here, on the way out of a real shift.
+						table.insert(data.recentEarnings, 1, earned)
+						while #data.recentEarnings > Config.OFFLINE_RECENT_SHIFTS do
+							table.remove(data.recentEarnings)
+						end
+
 						-- Every ordinary shift counts towards the daily tasks.
 						-- ensureToday first, so a shift finished just after
 						-- midnight lands on the new day's list rather than
@@ -591,6 +623,42 @@ local function startTickLoop()
 	end)
 end
 
+-- What the understudy earned while the player was away, banked for collection.
+--
+-- Runs once, from onLoaded, because that is the first moment the saved
+-- lastSeen can be read and the last moment before the next save overwrites it.
+-- Declared above ShiftService.start, which is where the closure that calls it
+-- is built.
+local function settleOffline(player: Player)
+	local profile = DataService.get(player)
+	if not profile then
+		return
+	end
+
+	-- A profile that has never been written has no away time to measure, which
+	-- covers a brand new player. A temporary profile is skipped for a sharper
+	-- reason: its real save could not be loaded, so paying it out would invent
+	-- cash against a profile we already know not to trust.
+	local lastSeen = profile.lastSeen or 0
+	if lastSeen <= 0 or DataService.isTemporary(player) then
+		return
+	end
+
+	local away = os.time() - lastSeen
+	if away <= 0 then
+		return
+	end
+
+	local report = OfflineDefs.accrue(profile, away)
+	if report.amount <= 0 then
+		return
+	end
+
+	DataService.update(player, function(data)
+		OfflineDefs.addPending(data.pendingOffline, report)
+	end)
+end
+
 function ShiftService.start()
 	for _, player in Players:GetPlayers() do
 		onPlayerAdded(player)
@@ -600,7 +668,13 @@ function ShiftService.start()
 
 	-- Profiles load asynchronously. An idle kitchen never pushes on its own,
 	-- so without this the client would sit on a profile-less snapshot.
-	DataService.onLoaded = pushSnapshot
+	--
+	-- It is also the first moment the saved lastSeen exists, which makes it the
+	-- only place the time away can be measured.
+	DataService.onLoaded = function(player: Player)
+		settleOffline(player)
+		pushSnapshot(player)
+	end
 
 	Remotes.StartShift.OnServerEvent:Connect(onStartShift)
 	Remotes.StationAction.OnServerEvent:Connect(onStationAction)

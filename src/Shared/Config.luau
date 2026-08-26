@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "staleness-46"
+Config.BUILD = "understudy-47"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -159,6 +159,38 @@ Config.BOOST_EARNINGS_RANGE = { 0.10, 0.30 }
 -- Flip this during playtesting; it changes the whole texture of the game.
 Config.WRONG_KEY_MODE = "reject" :: "reject" | "corrupt"
 Config.FUMBLE_LOCKOUT = 0.45       -- seconds of input lock after a wrong key
+
+-- -------------------------------------------------------------- offline ----
+-- The Understudy. See OfflineDefs for the fiction that these numbers are the
+-- mechanical half of.
+--
+-- The rule this is all tuned against: AN HOUR AWAY MUST NEVER APPROACH AN HOUR
+-- OF COOKING. A shift cycle is about two minutes of real time counting the
+-- draft and the results screen, so active play is roughly thirty shifts an
+-- hour. Two shifts an hour offline is under a tenth of that, which is enough
+-- to be worth collecting and nowhere near enough to replace playing.
+Config.OFFLINE_SHIFTS_PER_HOUR = 2
+
+-- How long the cell holds before the recording degrades into noise. The
+-- Continuity Cell upgrade adds hours to this -- never rate, which is the whole
+-- reason the upgrade cannot break the economy.
+--
+-- Eight hours covers a night's sleep, which is the gap this exists for.
+Config.OFFLINE_CAP_HOURS = 8
+
+-- What the impression loses. It is a copy, so it drops orders a real cook
+-- would not -- and this same fraction is what it loses on the till, so the
+-- walkouts on the collect screen and the payout are one number rather than two
+-- that can drift apart.
+Config.OFFLINE_WALKOUT_RATE = 0.31
+
+-- How many recent shifts the offline rate averages over. Enough to smooth out
+-- one bad run, few enough that improving is felt quickly.
+Config.OFFLINE_RECENT_SHIFTS = 5
+
+-- Below this there is nothing worth reporting, and a collect screen for eleven
+-- credits is worse than no collect screen.
+Config.OFFLINE_MIN_SECONDS = 120
 
 -- ---------------------------------------------------------------- debug ----
 -- Testing conveniences. TURN THIS OFF BEFORE RELEASE -- it lets a client end

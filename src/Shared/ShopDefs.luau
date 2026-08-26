@@ -115,6 +115,20 @@ ShopDefs.Upgrades = {
 		perLevel = 2,
 	},
 
+	cell = {
+		id = "cell",
+		name = "Continuity Cell",
+		blurb = "The understudy keeps the counter open four hours longer while you are away.",
+		-- Buys HOURS, never rate. The understudy earns a fraction of what the
+		-- player earns, so raising its rate would make not-playing better;
+		-- raising its cap only ever helps someone who was already away. The
+		-- station's own excuse is that it will not sell fidelity, because a
+		-- perfect copy of a worker raises questions nobody here wants asked.
+		levels = { 2500, 6000, 13000 },
+		baseValue = 0,
+		perLevel = 4,   -- +4 hours of cell per level
+	},
+
 	shift = {
 		id = "shift",
 		name = "Longer Licence",
@@ -127,7 +141,7 @@ ShopDefs.Upgrades = {
 	},
 }
 
-ShopDefs.UpgradeOrder = { "slots", "patience", "tips", "shift" }
+ShopDefs.UpgradeOrder = { "slots", "patience", "tips", "shift", "cell" }
 
 -- Upgrades that no longer exist. Any levels a player already bought are
 -- refunded at full price on their next load, because taking away something

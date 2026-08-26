@@ -61,6 +61,27 @@ local DEFAULT = {
 
 	rebirths = 0,
 
+	-- The last few shift payouts, newest first. The understudy earns a slice of
+	-- this average while the player is away, which is what keeps offline pay
+	-- tied to skill instead of handing everyone the same rate.
+	recentEarnings = {},
+
+	-- Unix seconds when this profile was last written. The gap between that and
+	-- the next load is the time the understudy covered.
+	lastSeen = 0,
+
+	-- Waiting to be collected. Held rather than credited on sight, so the
+	-- collect screen has something to hand over, and so a player who quits
+	-- before collecting does not lose it.
+	pendingOffline = {
+		amount = 0,
+		seconds = 0,
+		ran = 0,
+		served = 0,
+		left = 0,
+		asked = 0,
+	},
+
 	-- Daily tasks. `date` is the UTC stamp the task list belongs to, so a record
 	-- from yesterday is spotted and rerolled on the next look rather than
 	-- needing anything to clear it at midnight. `tasks` is filled by
@@ -253,6 +274,12 @@ function DataService.save(player: Player): boolean
 	if not profile or not profile.canSave or not store then
 		return false
 	end
+
+	-- Stamped on every write, so whatever lands in the DataStore carries the
+	-- moment it was written. The gap between this and the next load is exactly
+	-- the time the understudy covered -- and because leaving, autosaving and
+	-- shutting down all come through here, there is no exit that forgets it.
+	profile.data.lastSeen = os.time()
 
 	local ok = attempt("save " .. player.Name, function()
 		-- UpdateAsync rather than SetAsync: if the same profile were written

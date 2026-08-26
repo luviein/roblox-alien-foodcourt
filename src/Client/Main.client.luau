@@ -137,6 +137,11 @@ local function onStart()
 	-- without this it fires straight through and starts a shift under the
 	-- panel the player is still reading. Anything modal added later belongs in
 	-- this list.
+	-- The offline report is the exception: it has no dismiss, only a COLLECT
+	-- button, so E must do nothing at all rather than closing it.
+	if UI.isOfflineOpen(refs) then
+		return
+	end
 	if UI.isDailyOpen(refs) then
 		UI.setDailyOpen(refs, false)
 		return
@@ -173,6 +178,9 @@ refs = UI.build(playerGui, {
 	end,
 	onClaimDaily = function(index)
 		sendAction({ action = "claimDaily", index = index })
+	end,
+	onCollectOffline = function()
+		sendAction({ action = "collectOffline" })
 	end,
 })
 

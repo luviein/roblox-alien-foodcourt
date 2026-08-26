@@ -13,6 +13,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ChoreDefs = require(Shared.ChoreDefs)
 local Config = require(Shared.Config)
 local DailyDefs = require(Shared.DailyDefs)
+local OfflineDefs = require(Shared.OfflineDefs)
 local DishDefs = require(Shared.DishDefs)
 
 local UI = {}
@@ -765,6 +766,178 @@ local function renderBoosts(strip, profile)
 	end
 end
 
+-- What the understudy earned while you were away.
+--
+-- Opens by itself on arrival, which is the one place in this game that is
+-- allowed to: it is the first thing you want to see and it has a button that
+-- gives you money. It closes to the ordinary between-shifts screen and never
+-- comes back until there is something new in it.
+local function buildOfflinePanel(parent: Instance, onCollect: () -> ())
+	local shade = make("TextButton", {
+		Name = "OfflineShade",
+		BackgroundColor3 = COLOR.bg,
+		BackgroundTransparency = 0.25,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		Size = UDim2.fromScale(1, 1),
+		Visible = false,
+		ZIndex = 30,
+	}, parent)
+
+	-- Deliberately NOT click-to-dismiss. Every other panel closes on the shade,
+	-- but this one is handing over cash and a stray click behind it should not
+	-- look like it threw the cash away.
+	local panel = make("TextButton", {
+		Name = "Panel",
+		BackgroundColor3 = COLOR.panel,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromScale(0.44, 0.56),
+		ZIndex = 31,
+	}, shade)
+	corner(panel, 12)
+	stroke(panel, COLOR.stroke, 2)
+
+	local title = make("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.07, 0.06),
+		Size = UDim2.fromScale(0.86, 0.1),
+		Font = Enum.Font.GothamBold,
+		Text = "CONTINUITY IMPRESSION",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 32,
+	}, panel)
+	make("UITextSizeConstraint", { MaxTextSize = 26 }, title)
+
+	local span = make("TextLabel", {
+		Name = "Span",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.07, 0.16),
+		Size = UDim2.fromScale(0.86, 0.06),
+		Font = Enum.Font.GothamMedium,
+		Text = "",
+		TextColor3 = COLOR.dim,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 32,
+	}, panel)
+	make("UITextSizeConstraint", { MaxTextSize = 16 }, span)
+
+	local body = make("TextLabel", {
+		Name = "Body",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.07, 0.26),
+		Size = UDim2.fromScale(0.86, 0.26),
+		Font = Enum.Font.GothamMedium,
+		Text = "",
+		TextColor3 = COLOR.text,
+		TextSize = 17,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		ZIndex = 32,
+	}, panel)
+
+	-- Zorb's note. Italic-ish by being dimmer and smaller rather than by font,
+	-- since Gotham has no italic face in Roblox.
+	local note = make("TextLabel", {
+		Name = "Note",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.07, 0.54),
+		Size = UDim2.fromScale(0.86, 0.14),
+		Font = Enum.Font.GothamMedium,
+		Text = "",
+		TextColor3 = COLOR.dim,
+		TextSize = 15,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		ZIndex = 32,
+	}, panel)
+
+	local amount = make("TextLabel", {
+		Name = "Amount",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.07, 0.69),
+		Size = UDim2.fromScale(0.86, 0.11),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.perfect,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		ZIndex = 32,
+	}, panel)
+	make("UITextSizeConstraint", { MaxTextSize = 34 }, amount)
+
+	local collect = make("TextButton", {
+		Name = "Collect",
+		BackgroundColor3 = COLOR.good,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Position = UDim2.fromScale(0.07, 0.83),
+		Size = UDim2.fromScale(0.86, 0.11),
+		Font = Enum.Font.GothamBold,
+		Text = "BACK TO YOUR COUNTER",
+		TextColor3 = COLOR.bg,
+		TextScaled = true,
+		ZIndex = 32,
+	}, panel)
+	corner(collect, 8)
+	make("UITextSizeConstraint", { MaxTextSize = 20 }, collect)
+	collect.Activated:Connect(onCollect)
+
+	return {
+		shade = shade,
+		panel = panel,
+		title = title,
+		span = span,
+		body = body,
+		note = note,
+		amount = amount,
+		collect = collect,
+
+		-- Set once the player has dismissed this arrival's report, so a
+		-- snapshot arriving a tenth of a second later cannot reopen it.
+		dismissed = false,
+	}
+end
+
+local function renderOffline(panel, profile)
+	local pending = profile and profile.pendingOffline
+	local waiting = (pending and pending.amount) or 0
+
+	if waiting <= 0 or panel.dismissed then
+		panel.shade.Visible = false
+		return
+	end
+
+	panel.shade.Visible = true
+	panel.span.Text = string.format(
+		"%s unattended  .  station licence maintained",
+		OfflineDefs.formatSpan(pending.seconds or 0))
+
+	panel.body.Text = table.concat({
+		string.format("Ran your shift %d times.", pending.ran or 0),
+		string.format("Served %d. %d left.", pending.served or 0, pending.left or 0),
+		string.format("%d asked where you were.", pending.asked or 0),
+		"",
+		"Recording degraded. Please return to your counter.",
+	}, "\n")
+
+	panel.note.Text = string.format(
+		'"%s"\n                              - Zorb, Continuity Supervisor',
+		OfflineDefs.noteFor(pending))
+
+	panel.amount.Text = string.format("+ %d c", waiting)
+end
+
 -- Forward declared. The daily button's click handler is built here but runs
 -- much later, and renderDaily is defined further down the file next to the
 -- other render functions. Without this declaration that reference would
@@ -1148,6 +1321,16 @@ function UI.build(playerGui: Instance, callbacks): any
 	local dailyButton = buildRailButton(rail, "DAILY", 1)
 	local boostStrip = buildBoostStrip(root)
 
+	local offlinePanel
+	offlinePanel = buildOfflinePanel(root, function()
+		-- Hidden immediately rather than waiting for the server to confirm.
+		-- The button is the reward moment and it has to feel instant; the
+		-- profile catching up a tenth of a second later is invisible.
+		offlinePanel.dismissed = true
+		offlinePanel.shade.Visible = false
+		callbacks.onCollectOffline()
+	end)
+
 	-- Rendered on open rather than waiting for the next snapshot, so the panel
 	-- never appears holding stale numbers for a tenth of a second.
 	--
@@ -1175,6 +1358,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		dailyButton = dailyButton,
 		dailyPanel = dailyPanel,
 		boostStrip = boostStrip,
+		offlinePanel = offlinePanel,
 		plateReadout = buildPlateReadout(prep),
 		searMeter = buildSearMeter(prep),
 		keyGrid = buildKeyGrid(prep, callbacks.onKey),
@@ -1209,6 +1393,13 @@ end
 
 function UI.setDailyOpen(refs, open: boolean)
 	refs.dailyPanel.shade.Visible = open
+end
+
+-- The offline report has no dismiss of its own on purpose -- the only way out
+-- is the button that hands over the cash. So the keyboard must not have one
+-- either, or E starts a shift behind a report the player never collected.
+function UI.isOfflineOpen(refs): boolean
+	return refs.offlinePanel.shade.Visible
 end
 
 -- Assigned to the local forward declared near buildDailyPanel, above.
@@ -1426,6 +1617,15 @@ function UI.render(refs, snapshot)
 	refs.dailyButton.badge.Text = tostring(claimable)
 
 	renderBoosts(refs.boostStrip, snapshot.profile)
+
+	-- Only between shifts. Landing a full-screen report over a running counter
+	-- would be the worst possible moment for it, and the server can settle
+	-- offline time at any point a profile finishes loading.
+	if state == "Service" then
+		refs.offlinePanel.shade.Visible = false
+	else
+		renderOffline(refs.offlinePanel, snapshot.profile)
+	end
 
 	-- Which order is selected drives the key labels and the plate readout.
 	local activeOrder = nil
