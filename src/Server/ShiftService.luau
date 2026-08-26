@@ -333,6 +333,18 @@ local function onStationAction(player: Player, payload: any)
 		end
 		kitchen:selectSlot(slot)
 
+	elseif action == "endShift" then
+		-- Testing only. Ends the running shift immediately, paying out exactly
+		-- as if the clock had run down -- which is the point: it is for
+		-- reaching the results screen and the daily task progress quickly,
+		-- not for skipping either.
+		if not Config.DEBUG_COMMANDS then
+			return
+		end
+		kitchen:endShiftNow()
+		pushSnapshot(player)
+		return
+
 	elseif action == "claimDaily" then
 		-- Claiming a finished daily task. The index is the only thing the
 		-- client sends; everything about whether it is claimable, and what it

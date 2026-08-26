@@ -144,6 +144,20 @@ function Kitchen:closeResults()
 	end
 end
 
+-- Brings the closing bell forward to right now. A testing convenience, gated
+-- behind Config.DEBUG_COMMANDS by its caller.
+--
+-- It moves the CLOCK rather than setting the state directly, so the next tick
+-- ends the shift down exactly the same path a shift that ran its full length
+-- takes: results, payout, daily task progress, save. A second way to finish a
+-- shift is a second thing to keep in step, and this way there isn't one.
+function Kitchen:endShiftNow()
+	if self.state ~= "Service" then
+		return
+	end
+	self.shiftEndsAt = now()
+end
+
 function Kitchen:progress(): number
 	if self.state ~= "Service" then
 		return 0

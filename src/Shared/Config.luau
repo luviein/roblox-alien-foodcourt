@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "railfix-38"
+Config.BUILD = "endshift-39"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -150,6 +150,14 @@ Config.BOOST_EARNINGS_RANGE = { 0.10, 0.30 }
 -- Flip this during playtesting; it changes the whole texture of the game.
 Config.WRONG_KEY_MODE = "reject" :: "reject" | "corrupt"
 Config.FUMBLE_LOCKOUT = 0.45       -- seconds of input lock after a wrong key
+
+-- ---------------------------------------------------------------- debug ----
+-- Testing conveniences. TURN THIS OFF BEFORE RELEASE -- it lets a client end
+-- its own shift early, which pays out exactly as if the clock had run down.
+--
+-- One flag rather than one per command, so shipping is a single edit and
+-- there is no chance of leaving one of them on by accident.
+Config.DEBUG_COMMANDS = true
 
 -- --------------------------------------------------------------- server ----
 Config.TICK_RATE = 10              -- authoritative ticks per second

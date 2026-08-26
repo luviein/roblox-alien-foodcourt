@@ -106,6 +106,16 @@ local function onScrap()
 	sendAction({ action = "scrap" })
 end
 
+-- Testing: end the running shift immediately. The server decides whether to
+-- honour it -- see Config.DEBUG_COMMANDS -- so leaving this bound in a release
+-- build does nothing.
+--
+-- Declared above handleInput because that is what calls it, and a local
+-- declared after its caller resolves to a nil global at runtime.
+local function endShiftNow()
+	sendAction({ action = "endShift" })
+end
+
 -- Outside a shift, E opens the draft rather than starting immediately: the
 -- menu is the first decision of the day, not a detail to skip past. From the
 -- results screen it still just means "continue".
@@ -114,10 +124,19 @@ local function onStart()
 		return
 	end
 
-	-- An open panel eats the key. Without this, E fires straight through the
-	-- daily panel and starts the day underneath it.
+	-- Any open panel eats the key, closing itself and nothing else.
+	--
+	-- Each of these absorbs MOUSE clicks on its own, but a panel teaches the
+	-- keyboard nothing, and outside a shift E means "start the day" -- so
+	-- without this it fires straight through and starts a shift under the
+	-- panel the player is still reading. Anything modal added later belongs in
+	-- this list.
 	if UI.isDailyOpen(refs) then
 		UI.setDailyOpen(refs, false)
+		return
+	end
+	if ShopUI.isOpen(shop) then
+		ShopUI.setOpen(shop, false)
 		return
 	end
 
@@ -249,7 +268,12 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 		return Enum.ContextActionResult.Sink
 	end
 
-	if keyCode == Enum.KeyCode.C then
+	if keyCode == Enum.KeyCode.Backspace then
+		-- Testing: end the shift now. Backspace because nothing else uses it
+		-- and it is nowhere near the cooking keys, so it cannot be hit by
+		-- accident mid-order. Gated server-side on Config.DEBUG_COMMANDS.
+		endShiftNow()
+	elseif keyCode == Enum.KeyCode.C then
 		-- Clears whatever chore is up. Its own key so it never collides with an
 		-- ingredient on whatever dish happens to be in hand.
 		sendAction({ action = "chore" })
@@ -271,11 +295,36 @@ local BOUND_KEYS = {
 	Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.F, Enum.KeyCode.G,
 	Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,
 	Enum.KeyCode.Space, Enum.KeyCode.X, Enum.KeyCode.C,
+	Enum.KeyCode.Backspace,
 }
 
 -- Sinking Space also stops the character jumping under the UI, which is what
 -- we want -- this is a fixed-camera screen, not a platformer.
 ContextActionService:BindAction("AFC_Input", handleInput, false, table.unpack(BOUND_KEYS))
+
+-- The same testing command in the chat box, for when a key is awkward -- on a
+-- phone, or with the panel focus somewhere unhelpful.
+--
+-- Registered inside a pcall because TextChatCommand only exists under the
+-- current TextChatService. A place still on the legacy chat would throw here,
+-- and a debug convenience must never be the thing that stops the client
+-- booting. Backspace still works either way.
+if Config.DEBUG_COMMANDS then
+	task.spawn(function()
+		local ok, err = pcall(function()
+			local TextChatService = game:GetService("TextChatService")
+			local command = Instance.new("TextChatCommand")
+			command.Name = "EndShiftCommand"
+			command.PrimaryAlias = "/endshift"
+			command.SecondaryAlias = "/es"
+			command.Triggered:Connect(endShiftNow)
+			command.Parent = TextChatService
+		end)
+		if not ok then
+			warn("[AFC] /endshift unavailable, use Backspace instead: " .. tostring(err))
+		end
+	end)
+end
 
 -- ---------------------------------------------------------------- events ---
 
