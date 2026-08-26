@@ -105,36 +105,68 @@ end
 -- guard, because Studio without API access is precisely where this needs
 -- testing and is also the one place every profile is temporary.
 local function settleOffline(player: Player, force: boolean?): boolean
-	local profile = DataService.get(player)
-	if not profile then
+	-- Every way this can decline says so out loud while debug commands are on.
+	-- It used to return silently from five different places, which made "no
+	-- report appeared" indistinguishable from "the feature is broken" -- and
+	-- the commonest causes are environmental rather than bugs.
+	local function decline(reason: string): boolean
+		if Config.DEBUG_COMMANDS then
+			warn(("[offline] nothing for %s: %s"):format(player.Name, reason))
+		end
 		return false
 	end
 
-	-- A profile that has never been written has no away time to measure, which
-	-- covers a brand new player. A temporary profile is skipped for a sharper
-	-- reason: its real save could not be loaded, so paying it out would invent
-	-- cash against a profile we already know not to trust.
+	local profile = DataService.get(player)
+	if not profile then
+		return decline("profile is not loaded yet")
+	end
+
 	local lastSeen = profile.lastSeen or 0
 	if lastSeen <= 0 then
-		return false
+		return decline(
+			"this profile has never been saved, so there is no stamp to measure "
+				.. "from. Expected once, on the first return after the feature "
+				.. "shipped -- it will work on the return after this one.")
 	end
+
+	-- A temporary profile is skipped for a sharper reason than the rest: its
+	-- real save could not be loaded, so paying it out would invent cash against
+	-- a profile we already know not to trust. It is also why the debug command
+	-- can waive this and nothing else can.
 	if not force and DataService.isTemporary(player) then
-		return false
+		return decline(
+			"profile is TEMPORARY -- the real save could not be loaded, so "
+				.. "nothing here is trusted and lastSeen is never written. Turn on "
+				.. "Experience Settings > Security > Enable Studio Access to API "
+				.. "Services, and open the PUBLISHED place.")
 	end
 
 	local away = os.time() - lastSeen
 	if away <= 0 then
-		return false
+		return decline("no time has passed since the last save")
 	end
 
 	local report = OfflineDefs.accrue(profile, away)
 	if report.amount <= 0 then
-		return false
+		local perShift = OfflineDefs.perShift(profile.recentEarnings)
+		local detail = if perShift <= 0
+			then "no finished shifts on record, so there is no recording to play "
+				.. "back. Bank one with /skip."
+			else ("under the %s minimum for one run."):format(
+				OfflineDefs.formatSpan(OfflineDefs.secondsPerShift()))
+
+		return decline(("away %s, average shift %d c -- %s"):format(
+			OfflineDefs.formatSpan(away), math.floor(perShift), detail))
 	end
 
 	DataService.update(player, function(data)
 		OfflineDefs.addPending(data.pendingOffline, report)
 	end)
+
+	if Config.DEBUG_COMMANDS then
+		print(("[offline] %s was away %s: %d c banked"):format(
+			player.Name, OfflineDefs.formatSpan(report.seconds), report.amount))
+	end
 	return true
 end
 
