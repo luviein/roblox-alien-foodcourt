@@ -1,35 +1,26 @@
 --!strict
--- The daily challenge: one fixed shift a day, the same one for every player.
+-- Daily tasks: three things to go and do, rolled fresh every day.
 --
--- The whole value of a daily is that two scores are comparable, which means
--- everything that could differ between two players has to be nailed down:
+-- These are NOT a separate game mode. They are goals you complete by playing
+-- ordinary shifts -- serve this many dishes, clear this many chores, get
+-- through a day without anyone walking out -- so the daily gives a reason to
+-- come back without asking anyone to play something different.
 --
---   the menu      - drafted from the seed, not from what you have unlocked
---   the weather   - rolled from the seed
---   the tickets   - the order bag takes the seed, so the sequence matches
---   the chores    - they draw from that same bag rng, so they match too
---   base hype     - Config.BASE_HYPE flat, ignoring rebirths
---   patience,     - the unupgraded values, ignoring everything in the shop
---   slots, length
+-- Everyone gets the same three tasks on the same day, because they are rolled
+-- from the UTC day number. The PRIZE is not: that rolls per claim, per player,
+-- or every player on the station would win the same thing and opening it would
+-- stop being worth anything.
 --
--- If any one of those leaked through, a rebirthed player with a maxed shop
--- would post a bigger number for the same cooking, and the leaderboard this is
--- eventually for would measure progress rather than skill.
---
--- Shared rather than server-only so the client can render today's challenge
--- from the same maths instead of needing a remote to ask what it is.
+-- Shared rather than server-only so the panel can render targets and prize odds
+-- from the same table the server pays out from.
 
-local Config = require(script.Parent.Config)
-local DishDefs = require(script.Parent.DishDefs)
-local HypeDefs = require(script.Parent.HypeDefs)
 
 local DailyDefs = {}
 
 local SECONDS_PER_DAY = 86400
 
--- How many dishes are on a daily menu. Fixed rather than following the
--- player's menuSlots, for the same reason as everything else here.
-DailyDefs.MENU_SIZE = 3
+-- How many tasks are set each day.
+DailyDefs.TASK_COUNT = 3
 
 -- ------------------------------------------------------------------ time --
 
@@ -39,97 +30,262 @@ function DailyDefs.dayNumber(atSeconds: number?): number
 	return math.floor((atSeconds or os.time()) / SECONDS_PER_DAY)
 end
 
--- The same day as a stamp to store against a score. UTC, hence the "!".
+-- The same day as a stamp to store against a record. UTC, hence the "!".
 function DailyDefs.dateString(atSeconds: number?): string
 	return os.date("!%Y-%m-%d", atSeconds or os.time()) :: string
 end
 
--- ------------------------------------------------------------- challenge --
+-- ------------------------------------------------------------------ tasks --
 
--- Today's challenge, derived entirely from the day number.
+-- `mode` is how progress accumulates:
+--   "sum" -- added up across every shift played today
+--   "max" -- the best single shift today, so one great run counts and a
+--            hundred bad ones do not add up to it
 --
--- The menu takes one dish from each third of the catalog, which is ordered by
--- difficulty. That is deliberate: three dishes drawn at random could hand a
--- first-day player three of the hardest dishes in the game and nothing they
--- have ever cooked, and could equally hand out three trivial ones. A dish from
--- each third guarantees both a foothold and something to actually struggle
--- with, every single day.
---
--- Everything is drawn from ONE rng in a fixed order. Separate rngs seeded off
--- the same day would correlate the menu with the weather in ways that are hard
--- to see and impossible to debug.
-function DailyDefs.challengeFor(day: number)
+-- Targets are a range, rolled per day, so the same task is not identical every
+-- time it comes round. They are sized against a shift of roughly eight to
+-- eleven customers: the cumulative ones want two or three shifts, and the
+-- single-shift ones want one good one.
+DailyDefs.Tasks = {
+	serve = {
+		id = "serve",
+		mode = "sum",
+		range = { 18, 30 },
+		text = "Serve %d dishes",
+		blurb = "Any dish, any grade, across as many shifts as you like.",
+	},
+
+	perfect = {
+		id = "perfect",
+		mode = "sum",
+		range = { 10, 18 },
+		text = "Serve %d orders at Perfect",
+		blurb = "Hand them over while the patience bar is still green.",
+	},
+
+	chores = {
+		id = "chores",
+		mode = "sum",
+		range = { 5, 10 },
+		text = "Clear %d chores",
+		blurb = "The interruptions. Clear them before they time out.",
+	},
+
+	clean = {
+		id = "clean",
+		mode = "sum",
+		range = { 1, 2 },
+		text = "Finish %d shifts with nobody walking out",
+		blurb = "Every customer served. One walkout and the shift does not count.",
+	},
+
+	combo = {
+		id = "combo",
+		mode = "max",
+		range = { 8, 14 },
+		text = "Reach a combo of %d",
+		blurb = "In a single shift. Dropping it means starting the climb again.",
+	},
+
+	score = {
+		id = "score",
+		mode = "max",
+		range = { 800, 1600 },
+		text = "Score %d in one shift",
+		blurb = "Your best shift today counts, so it is worth another go.",
+	},
+}
+
+-- Fixed order, because iterating a Luau table is not deterministic and the
+-- daily roll has to land on the same three tasks for everybody.
+DailyDefs.TaskOrder = { "serve", "perfect", "chores", "clean", "combo", "score" }
+
+local function shuffled<T>(list: { T }, rng: Random): { T }
+	local copy = table.clone(list)
+	for index = #copy, 2, -1 do
+		local swap = rng:NextInteger(1, index)
+		copy[index], copy[swap] = copy[swap], copy[index]
+	end
+	return copy
+end
+
+-- Today's three tasks, derived entirely from the day number.
+function DailyDefs.rollTasks(day: number)
 	local rng = Random.new(day)
-	local catalog = DishDefs.ActiveMenu
-	local menu = {}
+	local picks = shuffled(DailyDefs.TaskOrder, rng)
+	local tasks = {}
 
-	local tiers = DailyDefs.MENU_SIZE
-	local perTier = math.max(1, math.floor(#catalog / tiers))
+	for index = 1, math.min(DailyDefs.TASK_COUNT, #picks) do
+		local def = DailyDefs.Tasks[picks[index]]
+		local target = rng:NextInteger(def.range[1], def.range[2])
 
-	for tier = 0, tiers - 1 do
-		local lo = tier * perTier + 1
-		-- The last tier absorbs the remainder when the catalog does not divide
-		-- evenly, so no dish is ever unreachable.
-		local hi = if tier == tiers - 1 then #catalog else (tier + 1) * perTier
-		if lo <= #catalog then
-			table.insert(menu, catalog[rng:NextInteger(lo, math.max(lo, hi))])
+		-- Score targets are rounded so the panel does not read "Score 1327 in
+		-- one shift", which looks like a bug rather than a goal.
+		if def.id == "score" then
+			target = math.floor(target / 100 + 0.5) * 100
 		end
+
+		table.insert(tasks, {
+			id = def.id,
+			target = target,
+			progress = 0,
+			claimed = false,
+		})
 	end
 
-	local weather = HypeDefs.rollWeather(rng)
-
-	return {
-		day = day,
-		date = DailyDefs.dateString(day * SECONDS_PER_DAY),
-		menu = menu,
-		seed = day,
-		weather = weather.id,
-		weatherName = weather.name,
-		weatherBlurb = weather.blurb,
-	}
+	return tasks
 end
 
-function DailyDefs.today()
-	return DailyDefs.challengeFor(DailyDefs.dayNumber())
+-- The line the panel shows for a task.
+function DailyDefs.describe(task): (string, string)
+	local def = DailyDefs.Tasks[task.id]
+	if not def then
+		return task.id, ""
+	end
+	return string.format(def.text, task.target), def.blurb
 end
 
--- ----------------------------------------------------------------- reward --
-
--- Paid once per day, on the first run. Later runs still record a better score
--- but pay nothing, so replaying is about the number rather than the money --
--- otherwise the daily becomes the most efficient way to farm cash and the
--- restaurant stops being the game.
-function DailyDefs.reward(score: number): number
-	return math.floor(
-		Config.DAILY_REWARD_BASE + score * Config.DAILY_REWARD_PER_POINT + 0.5)
+function DailyDefs.isComplete(task): boolean
+	return (task.progress or 0) >= task.target
 end
 
--- ---------------------------------------------------------------- status --
+-- ------------------------------------------------------------------ prize --
 
--- What the player's saved `daily` record means for today. Pure, so the client
--- can render the panel and the server can decide the payout from one place.
--- `day` rides along in the result on purpose. The client renders the panel from
--- this number rather than calling dayNumber() itself, because os.time() on the
--- client is the player's own machine clock: someone whose clock is a day out
--- would otherwise be shown a menu the server is not going to run.
-function DailyDefs.statusOf(record, day: number?)
+-- What claiming a finished task pays. Weighted, and rolled per claim rather
+-- than per day: a prize everyone can look up is not a prize.
+--
+-- Everything here is cash for now because cash is the only reward the game
+-- has. Pets and boosts drop in as new `kind`s when they exist, and the panel
+-- reads `name` either way.
+DailyDefs.PrizePool = {
+	{ id = "credits_small",  weight = 40, kind = "cash", amount = 150,  name = "A handful of credits" },
+	{ id = "credits_mid",    weight = 32, kind = "cash", amount = 350,  name = "A decent tip jar" },
+	{ id = "credits_large",  weight = 20, kind = "cash", amount = 750,  name = "A very good day" },
+	{ id = "credits_huge",   weight = 8,  kind = "cash", amount = 1800, name = "Someone tipped in bullion" },
+}
+
+function DailyDefs.rollPrize(rng: Random?)
+	local roll = rng or Random.new()
+
+	local total = 0
+	for _, entry in DailyDefs.PrizePool do
+		total += entry.weight
+	end
+
+	local pick = roll:NextNumber() * total
+	for _, entry in DailyDefs.PrizePool do
+		pick -= entry.weight
+		if pick <= 0 then
+			return entry
+		end
+	end
+	return DailyDefs.PrizePool[1]
+end
+
+-- ----------------------------------------------------------------- record --
+
+-- Rolls a fresh set of tasks when the stored record is from another day.
+-- Mutates in place and reports whether it changed anything, so the caller
+-- knows to save. `streak` counts consecutive days with at least one claim.
+function DailyDefs.ensureToday(record, day: number?): boolean
 	local dayNumber = day or DailyDefs.dayNumber()
 	local today = DailyDefs.dateString(dayNumber * SECONDS_PER_DAY)
 
-	if typeof(record) ~= "table" or record.date ~= today then
-		return {
-			day = dayNumber,
-			played = false,
-			score = 0,
-			streak = (record and record.streak) or 0,
-		}
+	if record.date == today and typeof(record.tasks) == "table" and #record.tasks > 0 then
+		return false
+	end
+
+	local yesterday = DailyDefs.dateString((dayNumber - 1) * SECONDS_PER_DAY)
+
+	-- A streak counts days you actually CLAIMED something, not days the game
+	-- happened to roll you tasks. It is checked here, on the way out of
+	-- yesterday, because this is the last moment yesterday's record exists.
+	if record.date == yesterday and (record.claimedToday or 0) > 0 then
+		record.streak = (record.streak or 0) + 1
+	else
+		record.streak = 0
+	end
+
+	record.date = today
+	record.tasks = DailyDefs.rollTasks(dayNumber)
+	record.claimedToday = 0
+	return true
+end
+
+-- Applies one finished shift to today's tasks. Returns true if anything moved,
+-- so the caller can skip a save when nothing did.
+--
+-- `stats` is the Kitchen's shift stats; `score` and `bestCombo` are its
+-- headline numbers. Kept here rather than in ShiftService so the rules for
+-- what counts live next to the tasks themselves.
+function DailyDefs.applyShift(record, stats, score: number, bestCombo: number): boolean
+	if typeof(record.tasks) ~= "table" then
+		return false
+	end
+
+	local contribution = {
+		serve = stats.served or 0,
+		perfect = stats.perfect or 0,
+		chores = stats.chores or 0,
+		-- Served at least one customer and lost nobody. The served check stops
+		-- an empty shift from quietly counting as a flawless one.
+		clean = if (stats.expired or 0) == 0 and (stats.served or 0) > 0 then 1 else 0,
+		combo = bestCombo,
+		score = score,
+	}
+
+	local moved = false
+	for _, task in record.tasks do
+		local def = DailyDefs.Tasks[task.id]
+		local gained = contribution[task.id]
+		if def and gained and gained > 0 then
+			local before = task.progress or 0
+			if def.mode == "max" then
+				task.progress = math.max(before, gained)
+			else
+				task.progress = before + gained
+			end
+			if task.progress ~= before then
+				moved = true
+			end
+		end
+	end
+
+	return moved
+end
+
+-- What the client needs to draw the panel and the badge.
+--
+-- `day` rides along on purpose: the client renders from this rather than
+-- calling dayNumber() itself, because os.time() on the client is the player's
+-- own machine clock and a clock a day out would show the wrong tasks.
+function DailyDefs.statusOf(record, day: number?)
+	local dayNumber = day or DailyDefs.dayNumber()
+
+	local tasks = {}
+	local claimable = 0
+
+	if typeof(record) == "table" and typeof(record.tasks) == "table" then
+		for _, task in record.tasks do
+			local complete = DailyDefs.isComplete(task)
+			if complete and not task.claimed then
+				claimable += 1
+			end
+			table.insert(tasks, {
+				id = task.id,
+				target = task.target,
+				progress = math.min(task.progress or 0, task.target),
+				claimed = task.claimed == true,
+				complete = complete,
+			})
+		end
 	end
 
 	return {
 		day = dayNumber,
-		played = true,
-		score = record.score or 0,
-		streak = record.streak or 0,
+		tasks = tasks,
+		claimable = claimable,
+		streak = (typeof(record) == "table" and record.streak) or 0,
 	}
 end
 

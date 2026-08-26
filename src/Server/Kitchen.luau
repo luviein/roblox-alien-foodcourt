@@ -61,6 +61,7 @@ function Kitchen.new(participants: { Player })
 	self.bestCombo = 0
 	self.stats = {
 		served = 0, perfect = 0, good = 0, sloppy = 0, failed = 0, expired = 0,
+		chores = 0,
 	}
 
 	self.shiftStartedAt = 0
@@ -120,6 +121,7 @@ function Kitchen:startShift(loadout)
 	self.bestCombo = 0
 	self.stats = {
 		served = 0, perfect = 0, good = 0, sloppy = 0, failed = 0, expired = 0,
+		chores = 0,
 	}
 	self.shiftStartedAt = t
 	self.shiftEndsAt = t + loadout.shiftDuration
@@ -539,6 +541,7 @@ function Kitchen:clearChore()
 	local choreId = self.chore.id
 	self.chore = nil
 	self.nextChoreAt = now() + choreGap(self.bag.rng)
+	self.stats.chores += 1
 
 	self:emit({ type = "choreCleared", choreId = choreId })
 end

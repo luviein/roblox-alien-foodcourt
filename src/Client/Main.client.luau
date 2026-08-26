@@ -133,11 +133,8 @@ local refs = UI.build(playerGui, {
 	onOpenShop = function()
 		ShopUI.setOpen(shop, true)
 	end,
-	-- No draft screen: the daily's menu is fixed, which is the whole point.
-	onPlayDaily = function()
-		if snapshot and snapshot.state == "Idle" then
-			Remotes.StartShift:FireServer(nil, "daily")
-		end
+	onClaimDaily = function(index)
+		sendAction({ action = "claimDaily", index = index })
 	end,
 })
 

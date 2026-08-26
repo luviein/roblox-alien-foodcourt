@@ -62,6 +62,17 @@ local function pushSnapshot(player: Player)
 
 	-- The profile rides along so the HUD can show cash without another remote.
 	local profile = DataService.get(player)
+
+	-- Reroll the moment the date turns over, so someone who leaves the game
+	-- open across midnight gets the new list without relogging. The cheap date
+	-- comparison guards the write: this runs at the tick rate, and marking the
+	-- profile dirty ten times a second for nothing would be silly.
+	if profile and profile.daily and profile.daily.date ~= DailyDefs.dateString() then
+		DataService.update(player, function(data)
+			DailyDefs.ensureToday(data.daily)
+		end)
+	end
+
 	if profile then
 		snapshot.profile = {
 			cash = profile.cash,
@@ -77,16 +88,17 @@ local function pushSnapshot(player: Player)
 			conditions = conditionsFor(player),
 			temporary = DataService.isTemporary(player),
 
-			-- Today's challenge and how the player has done on it. The client
-			-- could derive the challenge itself from DailyDefs, but not whether
-			-- the reward has already been paid.
+			-- Today's tasks and how far along they are. Rolled here if the
+			-- stored list is from another day, so a player who leaves the
+			-- game open across midnight gets the new list without relogging.
 			daily = DailyDefs.statusOf(profile.daily),
+
+			-- The last prize won, so the panel can announce it. Cleared once
+			-- shown; see onStationAction's "seenPrize".
+			lastPrize = kitchen.lastPrize,
 		}
 	end
 
-	-- Which mode the running shift is, so the HUD can say so and the results
-	-- screen can pay the right compliment.
-	snapshot.isDaily = kitchen.loadout and kitchen.loadout.daily == true
 	snapshot.events = kitchen:drainEvents()
 	Remotes.ShiftUpdate:FireClient(player, snapshot)
 end
@@ -229,45 +241,7 @@ local function loadoutFor(player: Player, chosen: { string }?)
 	}
 end
 
--- The daily challenge loadout. Reads NOTHING from the profile on purpose --
--- every number here is the same for every player, which is the only reason two
--- daily scores can be compared at all. See DailyDefs for the full list of what
--- had to be pinned down and why.
-local function dailyLoadout()
-	local challenge = DailyDefs.today()
-
-	local defs = {}
-	for _, dishId in challenge.menu do
-		table.insert(defs, DishDefs.get(dishId))
-	end
-
-	-- Flat base hype, no rebirth bonus. Staleness is passed as nil: the daily
-	-- menu is not yours and does not care what you cooked yesterday.
-	local hypeByPhase = {}
-	for _, phase in HypeDefs.Phases do
-		hypeByPhase[phase] =
-			HypeDefs.evaluate(defs, phase, challenge.weather, nil, Config.BASE_HYPE)
-	end
-
-	return {
-		daily = true,
-		menu = challenge.menu,
-		seed = challenge.seed,
-
-		-- Deliberately the UNUPGRADED values, so the shop cannot buy a better
-		-- daily score.
-		orderSlots = math.min(ShopDefs.valueOf("slots", 0), Config.MAX_ORDER_SLOTS),
-		shiftDuration = Config.SHIFT_DURATION,
-		orderPatience = Config.ORDER_PATIENCE,
-		cashMultiplier = 1,
-
-		hypeByPhase = hypeByPhase,
-		weather = challenge.weather,
-		tagCounts = HypeDefs.tagCounts(defs),
-	}
-end
-
-local function onStartShift(player: Player, chosenMenu: any, mode: any)
+local function onStartShift(player: Player, chosenMenu: any)
 	local kitchen = kitchens[player]
 	if not kitchen then
 		return
@@ -276,24 +250,18 @@ local function onStartShift(player: Player, chosenMenu: any, mode: any)
 	if kitchen.state == "Results" then
 		kitchen:closeResults()
 	elseif kitchen.state == "Idle" then
-		if mode == "daily" then
-			-- No recentMenus entry: the daily is not one of your restaurant
-			-- days and must not poison tomorrow's staleness.
-			kitchen:startShift(dailyLoadout())
-		else
-			local loadout = loadoutFor(player, if typeof(chosenMenu) == "table" then chosenMenu else nil)
-			kitchen:startShift(loadout)
+		local loadout = loadoutFor(player, if typeof(chosenMenu) == "table" then chosenMenu else nil)
+		kitchen:startShift(loadout)
 
-			-- Today's menu becomes tomorrow's repeat penalty. Recorded at the
-			-- START of the shift so quitting halfway does not dodge it.
-			DataService.update(player, function(data)
-				-- Newest first, trimmed to the staleness window.
-				table.insert(data.recentMenus, 1, table.clone(loadout.menu))
-				while #data.recentMenus > Config.MENU_STALE_DAYS do
-					table.remove(data.recentMenus)
-				end
-			end)
-		end
+		-- Today's menu becomes tomorrow's repeat penalty. Recorded at the
+		-- START of the shift so quitting halfway does not dodge it.
+		DataService.update(player, function(data)
+			-- Newest first, trimmed to the staleness window.
+			table.insert(data.recentMenus, 1, table.clone(loadout.menu))
+			while #data.recentMenus > Config.MENU_STALE_DAYS do
+				table.remove(data.recentMenus)
+			end
+		end)
 	end
 
 	pushSnapshot(player)
@@ -339,6 +307,54 @@ local function onStationAction(player: Player, payload: any)
 			return
 		end
 		kitchen:selectSlot(slot)
+
+	elseif action == "claimDaily" then
+		-- Claiming a finished daily task. The index is the only thing the
+		-- client sends; everything about whether it is claimable, and what it
+		-- pays, is decided here.
+		local index = payload.index
+		if typeof(index) ~= "number" then
+			return
+		end
+		index = math.floor(index)
+
+		-- Annotated because --!strict would otherwise infer `nil` from the
+		-- initialiser and object to the assignment inside the closure.
+		local prize: any = nil
+		DataService.update(player, function(data)
+			DailyDefs.ensureToday(data.daily)
+
+			local task = data.daily.tasks[index]
+			if not task or task.claimed or not DailyDefs.isComplete(task) then
+				return
+			end
+
+			-- Marked claimed BEFORE the payout is recorded, so two clicks
+			-- arriving together cannot both pass the check above.
+			task.claimed = true
+			data.daily.claimedToday = (data.daily.claimedToday or 0) + 1
+
+			prize = DailyDefs.rollPrize()
+			if prize.kind == "cash" then
+				data.cash += prize.amount
+			end
+		end)
+
+		if prize then
+			-- The serial is what lets the client tell a NEW win from the same
+			-- win arriving in the next ten snapshots. Without it the prize
+			-- popup would either flicker forever or need its own remote.
+			kitchen.prizeSerial = (kitchen.prizeSerial or 0) + 1
+			kitchen.lastPrize = {
+				serial = kitchen.prizeSerial,
+				name = prize.name,
+				kind = prize.kind,
+				amount = prize.amount,
+			}
+			DataService.save(player)
+		end
+		pushSnapshot(player)
+		return
 
 	elseif action == "settings" then
 		-- Client owns its own preferences; the server only stores them.
@@ -431,59 +447,33 @@ local function startTickLoop()
 				-- rather than inside Kitchen keeps the gameplay state machine
 				-- unaware of saving.
 				if before == "Service" and kitchen.state == "Results" then
-					if kitchen.loadout.daily then
-						-- The daily pays once. A replay still records a better
-						-- score but earns nothing, so the leaderboard number is
-						-- worth chasing and the cash is not farmable.
-						local today = DailyDefs.dateString()
-						local yesterday = DailyDefs.dateString(os.time() - 86400)
-						local earned = 0
+					-- Score is the skill number and stays big; cash is what
+					-- that skill is worth, and is deliberately a fraction.
+					local earned = math.floor(
+						kitchen.score
+							* kitchen.loadout.cashMultiplier
+							* Config.CASH_PER_POINT
+						+ 0.5)
+					kitchen.lastEarned = earned
 
-						DataService.update(player, function(data)
-							local record = data.daily
-							if record.date == today then
-								record.score = math.max(record.score or 0, kitchen.score)
-							else
-								-- A streak survives only if yesterday was played.
-								record.streak =
-									if record.date == yesterday then (record.streak or 0) + 1 else 1
-								record.date = today
-								record.score = kitchen.score
-								earned = DailyDefs.reward(kitchen.score)
-								data.cash += earned
-							end
+					DataService.update(player, function(data)
+						data.cash += earned
+						data.stats.shifts += 1
+						data.stats.served += kitchen.stats.served
+						data.stats.bestScore = math.max(data.stats.bestScore, kitchen.score)
+						data.day += 1
 
-							-- The daily is pure skill by construction, so its
-							-- score belongs in the best-score record. The day
-							-- counter is NOT advanced: this was not one of the
-							-- restaurant's days.
-							data.stats.served += kitchen.stats.served
-							data.stats.bestScore =
-								math.max(data.stats.bestScore, kitchen.score)
-						end)
+						-- Every ordinary shift counts towards the daily tasks.
+						-- ensureToday first, so a shift finished just after
+						-- midnight lands on the new day's list rather than
+						-- topping up a list that is about to be thrown away.
+						DailyDefs.ensureToday(data.daily)
+						DailyDefs.applyShift(
+							data.daily, kitchen.stats, kitchen.score, kitchen.bestCombo)
+					end)
 
-						kitchen.lastEarned = earned
-					else
-						-- Score is the skill number and stays big; cash is what
-						-- that skill is worth, and is deliberately a fraction.
-						local earned = math.floor(
-							kitchen.score
-								* kitchen.loadout.cashMultiplier
-								* Config.CASH_PER_POINT
-							+ 0.5)
-						kitchen.lastEarned = earned
-						DataService.update(player, function(data)
-							data.cash += earned
-							data.stats.shifts += 1
-							data.stats.served += kitchen.stats.served
-							data.stats.bestScore = math.max(data.stats.bestScore, kitchen.score)
-							data.day += 1
-						end)
-
-						-- A finished day gets fresh weather tomorrow.
-						dayConditions[player] = nil
-					end
-
+					-- A finished day gets fresh weather tomorrow.
+					dayConditions[player] = nil
 					DataService.save(player)
 				end
 				-- Idle kitchens have nothing moving; skip the traffic unless

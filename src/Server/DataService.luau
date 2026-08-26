@@ -61,12 +61,14 @@ local DEFAULT = {
 
 	rebirths = 0,
 
-	-- The daily challenge. `date` is the UTC stamp the score belongs to, so a
-	-- record from yesterday reads as "not played today" without needing to be
-	-- cleared at midnight by anything. `streak` counts consecutive days played.
+	-- Daily tasks. `date` is the UTC stamp the task list belongs to, so a record
+	-- from yesterday is spotted and rerolled on the next look rather than
+	-- needing anything to clear it at midnight. `tasks` is filled by
+	-- DailyDefs.ensureToday; `streak` counts consecutive days with a claim.
 	daily = {
 		date = "",
-		score = 0,
+		tasks = {},
+		claimedToday = 0,
 		streak = 0,
 	},
 

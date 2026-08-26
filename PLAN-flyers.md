@@ -84,3 +84,27 @@ Any future flow upgrade should be checked against this number first.
 but `Config.MAX_ORDER_SLOTS` clamps to 4 in `ShiftService.luau:202`. The second
 level, at 5,000 cash, buys nothing. Either raise the cap to 5 or cut the
 upgrade to a single level.
+
+## Daily tasks (built 2026-08-26, build dailytasks-36)
+
+Three goals a day, rolled from the UTC day number so everyone gets the same
+three. Completed by playing ORDINARY shifts -- there is no separate mode.
+Progress is applied once per finished shift in `ShiftService`, from the
+Kitchen's own stats, and the rules for what counts live in `DailyDefs`.
+
+Each finished task is claimed individually for one roll on the prize pool.
+The pool is all cash today because cash is the only reward the game has; pets
+and boosts drop in as new `kind`s and the panel reads `name` either way.
+
+Reached from a clipboard icon on the left-hand side rail, with a red badge
+showing how many prizes are waiting.
+
+### Open
+
+- **Daily check-ins** are the next piece, per the user. The `streak` field is
+  already counted (consecutive days with at least one claim) and shown in the
+  panel footer, so it is there to build against.
+- An earlier version of this feature was a fixed-loadout daily SHIFT with a
+  seeded menu and leaderboard-comparable scores. It was replaced by tasks and
+  the code is gone, but the idea is worth remembering if a leaderboard is ever
+  wanted: it needs every upgrade pinned down, which `DailyDefs` used to do.

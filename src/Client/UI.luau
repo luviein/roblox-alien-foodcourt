@@ -11,10 +11,8 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ChoreDefs = require(Shared.ChoreDefs)
-local Config = require(Shared.Config)
 local DailyDefs = require(Shared.DailyDefs)
 local DishDefs = require(Shared.DishDefs)
-local HypeDefs = require(Shared.HypeDefs)
 
 local UI = {}
 
@@ -145,7 +143,7 @@ end
 -- anyone walked in, and the player had no way to tell a quiet counter apart
 -- from a broken one. The bar reads against a FULL house rather than against
 -- the player's own base, so a new player sees a mostly empty track. That is
--- the honest picture and it is the whole pitch for Word of Mouth.
+-- the honest picture, and the empty part is what a better menu buys.
 --
 -- Hype is recomputed per phase, so this changes at the two phase boundaries;
 -- the delta label calls out which way it went, because a menu that earns its
@@ -182,7 +180,7 @@ local function buildHypeMeter(parent: Instance)
 		Position = UDim2.fromScale(0.45, 0.06),
 		Size = UDim2.fromScale(0.5, 0.5),
 		Font = Enum.Font.GothamBold,
-		Text = "HYPE 30%",
+		Text = "HYPE 25%",
 		TextColor3 = COLOR.text,
 		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Right,
@@ -517,25 +515,6 @@ local function buildOverlay(parent: Instance, onStart: () -> ())
 	corner(shop, 8)
 	make("UITextSizeConstraint", { MaxTextSize = 18 }, shop)
 
-	-- Sits beside the depot rather than above it: the daily is a side dish, not
-	-- the way into the game. A new player should meet the restaurant first.
-	local daily = make("TextButton", {
-		Name = "Daily",
-		BackgroundColor3 = COLOR.panelHi,
-		BorderSizePixel = 0,
-		AutoButtonColor = false,
-		Position = UDim2.fromScale(0.5, 0.9),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromScale(0.26, 0.07),
-		Font = Enum.Font.GothamBold,
-		Text = "DAILY CHALLENGE",
-		TextColor3 = COLOR.text,
-		TextScaled = true,
-		ZIndex = 11,
-	}, overlay)
-	corner(daily, 8)
-	make("UITextSizeConstraint", { MaxTextSize = 18 }, daily)
-
 	local cash = make("TextLabel", {
 		Name = "Cash",
 		BackgroundTransparency = 1,
@@ -556,9 +535,125 @@ local function buildOverlay(parent: Instance, onStart: () -> ())
 		body = body,
 		start = start,
 		shop = shop,
-		daily = daily,
 		cash = cash,
 	}
+end
+
+-- The side rail: the strip of round buttons down the left edge, which is where
+-- a Roblox player's hand already goes looking for this sort of thing.
+--
+-- Parented to the root rather than to the overlay so it stays reachable during
+-- a shift as well as between them. It holds one button today; anything else
+-- that wants a permanent home on screen goes in the same column.
+local function buildSideRail(parent: Instance)
+	local rail = make("Frame", {
+		Name = "SideRail",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.012, 0.30),
+		Size = UDim2.fromScale(0.075, 0.4),
+		ZIndex = 12,
+	}, parent)
+
+	local layout = make("UIListLayout", {
+		FillDirection = Enum.FillDirection.Vertical,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 10),
+	}, rail)
+	layout.Name = "Layout"
+
+	return rail
+end
+
+-- One button on the side rail, drawn as a clipboard.
+--
+-- Built out of frames rather than an uploaded image: an image asset has to be
+-- moderated before it renders, and a button that is invisible for a day is
+-- worse than one drawn in primitives. The shape is a pale sheet with a darker
+-- header strip and three ruled lines.
+local function buildRailButton(parent: Instance, label: string, order: number)
+	local button = make("TextButton", {
+		Name = label,
+		BackgroundColor3 = COLOR.panel,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		LayoutOrder = order,
+		Size = UDim2.fromScale(1, 0),
+		ZIndex = 12,
+	}, parent)
+	corner(button, 12)
+	stroke(button, COLOR.stroke, 2)
+
+	-- Square, whatever the screen does. Without this the rail's percentage
+	-- height makes the button a different shape on every device.
+	make("UIAspectRatioConstraint", { AspectRatio = 1 }, button)
+	make("UISizeConstraint", { MaxSize = Vector2.new(78, 78) }, button)
+
+	local sheet = make("Frame", {
+		Name = "Sheet",
+		BackgroundColor3 = Color3.fromRGB(238, 241, 248),
+		BorderSizePixel = 0,
+		Position = UDim2.fromScale(0.22, 0.14),
+		Size = UDim2.fromScale(0.56, 0.5),
+		ZIndex = 13,
+	}, button)
+	corner(sheet, 4)
+
+	local clip = make("Frame", {
+		Name = "Clip",
+		BackgroundColor3 = COLOR.accent,
+		BorderSizePixel = 0,
+		Position = UDim2.fromScale(0.3, -0.12),
+		Size = UDim2.fromScale(0.4, 0.2),
+		ZIndex = 14,
+	}, sheet)
+	corner(clip, 3)
+
+	for line = 1, 3 do
+		local ruled = make("Frame", {
+			Name = "Line" .. line,
+			BackgroundColor3 = Color3.fromRGB(150, 158, 176),
+			BorderSizePixel = 0,
+			Position = UDim2.fromScale(0.16, 0.26 + (line - 1) * 0.22),
+			Size = UDim2.fromScale(if line == 3 then 0.42 else 0.68, 0.1),
+			ZIndex = 14,
+		}, sheet)
+		corner(ruled, 2)
+	end
+
+	local caption = make("TextLabel", {
+		Name = "Caption",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0, 0.68),
+		Size = UDim2.fromScale(1, 0.24),
+		Font = Enum.Font.GothamBold,
+		Text = label,
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		ZIndex = 14,
+	}, button)
+	make("UITextSizeConstraint", { MaxTextSize = 15 }, caption)
+
+	-- The count of things waiting to be claimed. Hidden at zero, because a
+	-- badge that is always there stops meaning anything.
+	local badge = make("TextLabel", {
+		Name = "Badge",
+		BackgroundColor3 = COLOR.bad,
+		BorderSizePixel = 0,
+		Position = UDim2.fromScale(0.72, -0.08),
+		Size = UDim2.fromScale(0.42, 0.42),
+		Font = Enum.Font.GothamBold,
+		Text = "0",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		Visible = false,
+		ZIndex = 15,
+	}, button)
+	corner(badge, 999)
+	make("UITextSizeConstraint", { MaxTextSize = 16 }, badge)
+
+	return { button = button, badge = badge, caption = caption }
 end
 
 -- Forward declared. The daily button's click handler is built here but runs
@@ -567,11 +662,11 @@ end
 -- resolve to a nil GLOBAL at runtime rather than failing to compile.
 local renderDaily
 
--- The daily challenge panel.
+-- The daily tasks panel.
 --
 -- A TextButton with no text rather than a Frame, because a plain Frame does not
 -- absorb clicks and every one of them would land on the shade behind it.
-local function buildDailyPanel(parent: Instance, onPlay: () -> (), onClose: () -> ())
+local function buildDailyPanel(parent: Instance, onClaim: (number) -> (), onClose: () -> ())
 	local shade = make("TextButton", {
 		Name = "DailyShade",
 		BackgroundColor3 = COLOR.bg,
@@ -605,7 +700,7 @@ local function buildDailyPanel(parent: Instance, onPlay: () -> (), onClose: () -
 		Position = UDim2.fromScale(0.06, 0.05),
 		Size = UDim2.fromScale(0.88, 0.1),
 		Font = Enum.Font.GothamBold,
-		Text = "DAILY CHALLENGE",
+		Text = "DAILY TASKS",
 		TextColor3 = COLOR.text,
 		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -627,45 +722,129 @@ local function buildDailyPanel(parent: Instance, onPlay: () -> (), onClose: () -
 	}, panel)
 	make("UITextSizeConstraint", { MaxTextSize = 16 }, date)
 
-	local body = make("TextLabel", {
-		Name = "Body",
+	-- One row per task. Built up front rather than on demand: three rows is a
+	-- fixed number, and rebuilding instances every render is how you get a
+	-- panel that flickers.
+	local rows = {}
+	for index = 1, DailyDefs.TASK_COUNT do
+		local row = make("Frame", {
+			Name = "Task" .. index,
+			BackgroundColor3 = COLOR.panelHi,
+			BorderSizePixel = 0,
+			Position = UDim2.fromScale(0.06, 0.23 + (index - 1) * 0.185),
+			Size = UDim2.fromScale(0.88, 0.165),
+			ZIndex = 22,
+		}, panel)
+		corner(row, 8)
+
+		local goal = make("TextLabel", {
+			Name = "Goal",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.04, 0.08),
+			Size = UDim2.fromScale(0.62, 0.36),
+			Font = Enum.Font.GothamBold,
+			Text = "",
+			TextColor3 = COLOR.text,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = 23,
+		}, row)
+		make("UITextSizeConstraint", { MaxTextSize = 17 }, goal)
+
+		local count = make("TextLabel", {
+			Name = "Count",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.04, 0.46),
+			Size = UDim2.fromScale(0.4, 0.3),
+			Font = Enum.Font.GothamMedium,
+			Text = "",
+			TextColor3 = COLOR.dim,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = 23,
+		}, row)
+		make("UITextSizeConstraint", { MaxTextSize = 14 }, count)
+
+		local track = make("Frame", {
+			Name = "Track",
+			BackgroundColor3 = COLOR.bg,
+			BorderSizePixel = 0,
+			Position = UDim2.fromScale(0.04, 0.8),
+			Size = UDim2.fromScale(0.62, 0.1),
+			ZIndex = 23,
+		}, row)
+		corner(track, 3)
+
+		local fill = make("Frame", {
+			Name = "Fill",
+			BackgroundColor3 = COLOR.accent,
+			BorderSizePixel = 0,
+			Size = UDim2.fromScale(0, 1),
+			ZIndex = 24,
+		}, track)
+		corner(fill, 3)
+
+		local claim = make("TextButton", {
+			Name = "Claim",
+			BackgroundColor3 = COLOR.panel,
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Position = UDim2.fromScale(0.7, 0.2),
+			Size = UDim2.fromScale(0.26, 0.6),
+			Font = Enum.Font.GothamBold,
+			Text = "LOCKED",
+			TextColor3 = COLOR.dim,
+			TextScaled = true,
+			ZIndex = 23,
+		}, row)
+		corner(claim, 6)
+		make("UITextSizeConstraint", { MaxTextSize = 16 }, claim)
+		claim.Activated:Connect(function()
+			onClaim(index)
+		end)
+
+		rows[index] = {
+			frame = row, goal = goal, count = count, fill = fill, claim = claim,
+		}
+	end
+
+	-- Announces what the last claim rolled. Sits in the footer so it does not
+	-- push the rows around when it appears.
+	local prize = make("TextLabel", {
+		Name = "Prize",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.06, 0.24),
-		Size = UDim2.fromScale(0.88, 0.46),
+		Position = UDim2.fromScale(0.06, 0.79),
+		Size = UDim2.fromScale(0.88, 0.08),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.perfect,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 22,
+	}, panel)
+	make("UITextSizeConstraint", { MaxTextSize = 17 }, prize)
+
+	local footer = make("TextLabel", {
+		Name = "Footer",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.06, 0.87),
+		Size = UDim2.fromScale(0.6, 0.07),
 		Font = Enum.Font.GothamMedium,
 		Text = "",
-		TextColor3 = COLOR.text,
-		TextSize = 16,
-		TextWrapped = true,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextYAlignment = Enum.TextYAlignment.Top,
-		ZIndex = 22,
-	}, panel)
-
-	local play = make("TextButton", {
-		Name = "Play",
-		BackgroundColor3 = COLOR.good,
-		BorderSizePixel = 0,
-		AutoButtonColor = false,
-		Position = UDim2.fromScale(0.06, 0.78),
-		Size = UDim2.fromScale(0.55, 0.13),
-		Font = Enum.Font.GothamBold,
-		Text = "COOK IT",
-		TextColor3 = COLOR.bg,
+		TextColor3 = COLOR.dim,
 		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 22,
 	}, panel)
-	corner(play, 8)
-	make("UITextSizeConstraint", { MaxTextSize = 20 }, play)
-	play.Activated:Connect(onPlay)
+	make("UITextSizeConstraint", { MaxTextSize = 14 }, footer)
 
 	local close = make("TextButton", {
 		Name = "Close",
 		BackgroundColor3 = COLOR.panelHi,
 		BorderSizePixel = 0,
 		AutoButtonColor = false,
-		Position = UDim2.fromScale(0.66, 0.78),
-		Size = UDim2.fromScale(0.28, 0.13),
+		Position = UDim2.fromScale(0.7, 0.86),
+		Size = UDim2.fromScale(0.24, 0.09),
 		Font = Enum.Font.GothamBold,
 		Text = "BACK",
 		TextColor3 = COLOR.text,
@@ -673,7 +852,7 @@ local function buildDailyPanel(parent: Instance, onPlay: () -> (), onClose: () -
 		ZIndex = 22,
 	}, panel)
 	corner(close, 8)
-	make("UITextSizeConstraint", { MaxTextSize = 20 }, close)
+	make("UITextSizeConstraint", { MaxTextSize = 18 }, close)
 	close.Activated:Connect(onClose)
 
 	return {
@@ -681,9 +860,17 @@ local function buildDailyPanel(parent: Instance, onPlay: () -> (), onClose: () -
 		panel = panel,
 		title = title,
 		date = date,
-		body = body,
-		play = play,
+		rows = rows,
+		prize = prize,
+		footer = footer,
 		close = close,
+
+		-- Declared up front rather than assigned on first use, so the shape of
+		-- this table is honest under --!strict. lastProfile lets the panel
+		-- render the instant it opens; shownPrizeSerial stops the snapshot
+		-- re-announcing the same win ten times a second.
+		lastProfile = nil :: any,
+		shownPrizeSerial = nil :: number?,
 	}
 end
 
@@ -842,15 +1029,18 @@ function UI.build(playerGui: Instance, callbacks): any
 	overlay.shop.Activated:Connect(callbacks.onOpenShop)
 
 	local dailyPanel
-	dailyPanel = buildDailyPanel(root, function()
-		dailyPanel.shade.Visible = false
-		callbacks.onPlayDaily()
+	dailyPanel = buildDailyPanel(root, function(index)
+		callbacks.onClaimDaily(index)
 	end, function()
 		dailyPanel.shade.Visible = false
 	end)
+
+	local rail = buildSideRail(root)
+	local dailyButton = buildRailButton(rail, "DAILY", 1)
+
 	-- Rendered on open rather than waiting for the next snapshot, so the panel
-	-- never appears holding the last player's numbers for a tenth of a second.
-	overlay.daily.Activated:Connect(function()
+	-- never appears holding stale numbers for a tenth of a second.
+	dailyButton.button.Activated:Connect(function()
 		renderDaily(dailyPanel, dailyPanel.lastProfile)
 		dailyPanel.shade.Visible = true
 	end)
@@ -863,6 +1053,8 @@ function UI.build(playerGui: Instance, callbacks): any
 		hint = hint,
 		topBar = buildTopBar(root),
 		hypeMeter = buildHypeMeter(root),
+		rail = rail,
+		dailyButton = dailyButton,
 		dailyPanel = dailyPanel,
 		plateReadout = buildPlateReadout(prep),
 		searMeter = buildSearMeter(prep),
@@ -900,53 +1092,62 @@ function renderDaily(panel, profile)
 		return
 	end
 
-	-- Built from the day number the SERVER sent, never from the client's own
-	-- clock. A machine set a day fast would otherwise show a menu that is not
-	-- the one about to be cooked.
-	local challenge = DailyDefs.challengeFor(status.day)
+	-- The date comes from the day number the SERVER sent, never from the
+	-- client's own clock: a machine set a day fast would otherwise show a task
+	-- list the server is not tracking.
+	panel.date.Text = string.format(
+		"%s  .  new tasks at midnight UTC",
+		DailyDefs.dateString(status.day * 86400))
 
-	panel.date.Text = string.format("%s  .  resets at midnight UTC", challenge.date)
+	for index, row in panel.rows do
+		local task = status.tasks[index]
+		if not task then
+			row.frame.Visible = false
+		else
+			row.frame.Visible = true
 
-	local lines = { "TODAY'S MENU", "" }
-	for _, dishId in challenge.menu do
-		local dish = DishDefs.get(dishId)
-		table.insert(lines, "   " .. (if dish then dish.displayName else dishId))
+			local goal = DailyDefs.describe(task)
+			row.goal.Text = goal
+			row.count.Text = string.format("%d / %d", task.progress, task.target)
+			row.fill.Size = UDim2.fromScale(
+				math.clamp(task.progress / math.max(task.target, 1), 0, 1), 1)
+
+			-- Three states, and the button says which: nothing to do yet, a
+			-- prize waiting, or already taken.
+			if task.claimed then
+				row.claim.Text = "CLAIMED"
+				row.claim.BackgroundColor3 = COLOR.panel
+				row.claim.TextColor3 = COLOR.dim
+				row.fill.BackgroundColor3 = COLOR.dim
+			elseif task.complete then
+				row.claim.Text = "CLAIM"
+				row.claim.BackgroundColor3 = COLOR.good
+				row.claim.TextColor3 = COLOR.bg
+				row.fill.BackgroundColor3 = COLOR.good
+			else
+				row.claim.Text = "LOCKED"
+				row.claim.BackgroundColor3 = COLOR.panel
+				row.claim.TextColor3 = COLOR.dim
+				row.fill.BackgroundColor3 = COLOR.accent
+			end
+		end
 	end
 
-	local weather = HypeDefs.weather(challenge.weather)
-	table.insert(lines, "")
-	table.insert(lines, string.format("WEATHER   %s -- %s", weather.name, weather.blurb))
-	table.insert(lines, "")
+	local streak = status.streak or 0
+	panel.footer.Text = if streak > 0
+		then string.format("Progress counts from every shift.   Streak %d days", streak)
+		else "Progress counts from every shift you play."
 
-	-- Worth saying outright. The fixed loadout is the point of the mode, and a
-	-- player who does not know it will read their lower score as a bad run.
-	table.insert(lines,
-		"Everyone cooks this same shift, on the same tickets, with none of "
-			.. "your upgrades. Pure skill.")
-	table.insert(lines, "")
-
-	if status.played then
-		table.insert(lines, string.format(
-			"Today's score  %d      Reward already claimed.", status.score))
-		table.insert(lines, "Play again to beat it -- the score counts, the cash does not.")
-		panel.play.Text = "TRY AGAIN"
-		panel.play.BackgroundColor3 = COLOR.panelHi
-		panel.play.TextColor3 = COLOR.text
-	else
-		table.insert(lines, string.format(
-			"Not played yet today. Finishing pays %d c plus %d c per hundred points.",
-			Config.DAILY_REWARD_BASE,
-			math.floor(Config.DAILY_REWARD_PER_POINT * 100 + 0.5)))
-		panel.play.Text = "COOK IT"
-		panel.play.BackgroundColor3 = COLOR.good
-		panel.play.TextColor3 = COLOR.bg
+	-- Only announce a prize the player has not been shown yet. The snapshot
+	-- repeats the last one ten times a second, so without the serial check
+	-- this line would never clear.
+	local won = profile.lastPrize
+	if won and won.serial and won.serial ~= panel.shownPrizeSerial then
+		panel.shownPrizeSerial = won.serial
+		panel.prize.Text = if won.kind == "cash"
+			then string.format("%s  .  +%d c", won.name, won.amount)
+			else won.name
 	end
-
-	if (status.streak or 0) > 1 then
-		table.insert(lines, string.format("Streak  %d days", status.streak))
-	end
-
-	panel.body.Text = table.concat(lines, "\n")
 end
 
 -- Declared above UI.render because that is the only thing that calls it, and a
@@ -1006,16 +1207,11 @@ function UI.render(refs, snapshot)
 		refs.overlay.start.Text = "PLAN THE DAY  [E]"
 	elseif state == "Results" then
 		local stats = snapshot.stats
-		local heading = if snapshot.isDaily then "DAILY DONE" else "SHIFT OVER"
-		refs.overlay.title.Text = string.format("%s . %d c", heading, snapshot.score)
+		refs.overlay.title.Text = string.format("SHIFT OVER . %d c", snapshot.score)
 		if snapshot.profile and snapshot.profile.lastEarned then
-			-- A daily replay pays nothing, and saying "+0 c" reads as a bug
-			-- rather than as the rule it is.
-			refs.overlay.title.Text = if snapshot.isDaily and snapshot.profile.lastEarned == 0
-				then string.format("%s . %d pts . already claimed today", heading, snapshot.score)
-				else string.format(
-					"%s . %d pts . +%d c",
-					heading, snapshot.score, snapshot.profile.lastEarned)
+			refs.overlay.title.Text = string.format(
+				"SHIFT OVER . %d pts . +%d c",
+				snapshot.score, snapshot.profile.lastEarned)
 		end
 		refs.overlay.body.Text = table.concat({
 			string.format("Perfect %d      Good %d      Sloppy %d", stats.perfect, stats.good, stats.sloppy),
@@ -1046,14 +1242,21 @@ function UI.render(refs, snapshot)
 	-- Kept current so the panel can render the instant it is opened.
 	refs.dailyPanel.lastProfile = snapshot.profile
 
-	-- The daily panel only makes sense between shifts. Closing it on the way
-	-- into service also covers the case where the shift was started by the
-	-- keyboard rather than by its own button.
-	if state ~= "Idle" then
+	-- The rail is for between shifts. Hiding it during service keeps the
+	-- cooking screen clear, and closes the panel if a shift starts under it.
+	local daily = snapshot.profile and snapshot.profile.daily
+	refs.rail.Visible = state ~= "Service"
+	if state == "Service" then
 		refs.dailyPanel.shade.Visible = false
 	elseif refs.dailyPanel.shade.Visible then
 		renderDaily(refs.dailyPanel, snapshot.profile)
 	end
+
+	-- The badge is on the rail rather than in the panel, so a finished task is
+	-- visible without opening anything.
+	local claimable = (daily and daily.claimable) or 0
+	refs.dailyButton.badge.Visible = claimable > 0
+	refs.dailyButton.badge.Text = tostring(claimable)
 
 	-- Which order is selected drives the key labels and the plate readout.
 	local activeOrder = nil
