@@ -11,7 +11,10 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ChoreDefs = require(Shared.ChoreDefs)
+local Config = require(Shared.Config)
+local DailyDefs = require(Shared.DailyDefs)
 local DishDefs = require(Shared.DishDefs)
+local HypeDefs = require(Shared.HypeDefs)
 
 local UI = {}
 
@@ -514,12 +517,31 @@ local function buildOverlay(parent: Instance, onStart: () -> ())
 	corner(shop, 8)
 	make("UITextSizeConstraint", { MaxTextSize = 18 }, shop)
 
+	-- Sits beside the depot rather than above it: the daily is a side dish, not
+	-- the way into the game. A new player should meet the restaurant first.
+	local daily = make("TextButton", {
+		Name = "Daily",
+		BackgroundColor3 = COLOR.panelHi,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Position = UDim2.fromScale(0.5, 0.9),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Size = UDim2.fromScale(0.26, 0.07),
+		Font = Enum.Font.GothamBold,
+		Text = "DAILY CHALLENGE",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		ZIndex = 11,
+	}, overlay)
+	corner(daily, 8)
+	make("UITextSizeConstraint", { MaxTextSize = 18 }, daily)
+
 	local cash = make("TextLabel", {
 		Name = "Cash",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.5, 0.9),
+		Position = UDim2.fromScale(0.5, 0.975),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromScale(0.4, 0.05),
+		Size = UDim2.fromScale(0.4, 0.045),
 		Font = Enum.Font.GothamBold,
 		Text = "",
 		TextColor3 = COLOR.perfect,
@@ -534,7 +556,134 @@ local function buildOverlay(parent: Instance, onStart: () -> ())
 		body = body,
 		start = start,
 		shop = shop,
+		daily = daily,
 		cash = cash,
+	}
+end
+
+-- Forward declared. The daily button's click handler is built here but runs
+-- much later, and renderDaily is defined further down the file next to the
+-- other render functions. Without this declaration that reference would
+-- resolve to a nil GLOBAL at runtime rather than failing to compile.
+local renderDaily
+
+-- The daily challenge panel.
+--
+-- A TextButton with no text rather than a Frame, because a plain Frame does not
+-- absorb clicks and every one of them would land on the shade behind it.
+local function buildDailyPanel(parent: Instance, onPlay: () -> (), onClose: () -> ())
+	local shade = make("TextButton", {
+		Name = "DailyShade",
+		BackgroundColor3 = COLOR.bg,
+		BackgroundTransparency = 0.35,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		Size = UDim2.fromScale(1, 1),
+		Visible = false,
+		ZIndex = 20,
+	}, parent)
+	shade.Activated:Connect(onClose)
+
+	local panel = make("TextButton", {
+		Name = "Panel",
+		BackgroundColor3 = COLOR.panel,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromScale(0.42, 0.56),
+		ZIndex = 21,
+	}, shade)
+	corner(panel, 12)
+	stroke(panel, COLOR.stroke, 2)
+
+	local title = make("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.06, 0.05),
+		Size = UDim2.fromScale(0.88, 0.1),
+		Font = Enum.Font.GothamBold,
+		Text = "DAILY CHALLENGE",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 22,
+	}, panel)
+	make("UITextSizeConstraint", { MaxTextSize = 28 }, title)
+
+	local date = make("TextLabel", {
+		Name = "Date",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.06, 0.15),
+		Size = UDim2.fromScale(0.88, 0.06),
+		Font = Enum.Font.GothamMedium,
+		Text = "",
+		TextColor3 = COLOR.dim,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 22,
+	}, panel)
+	make("UITextSizeConstraint", { MaxTextSize = 16 }, date)
+
+	local body = make("TextLabel", {
+		Name = "Body",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.06, 0.24),
+		Size = UDim2.fromScale(0.88, 0.46),
+		Font = Enum.Font.GothamMedium,
+		Text = "",
+		TextColor3 = COLOR.text,
+		TextSize = 16,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		ZIndex = 22,
+	}, panel)
+
+	local play = make("TextButton", {
+		Name = "Play",
+		BackgroundColor3 = COLOR.good,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Position = UDim2.fromScale(0.06, 0.78),
+		Size = UDim2.fromScale(0.55, 0.13),
+		Font = Enum.Font.GothamBold,
+		Text = "COOK IT",
+		TextColor3 = COLOR.bg,
+		TextScaled = true,
+		ZIndex = 22,
+	}, panel)
+	corner(play, 8)
+	make("UITextSizeConstraint", { MaxTextSize = 20 }, play)
+	play.Activated:Connect(onPlay)
+
+	local close = make("TextButton", {
+		Name = "Close",
+		BackgroundColor3 = COLOR.panelHi,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Position = UDim2.fromScale(0.66, 0.78),
+		Size = UDim2.fromScale(0.28, 0.13),
+		Font = Enum.Font.GothamBold,
+		Text = "BACK",
+		TextColor3 = COLOR.text,
+		TextScaled = true,
+		ZIndex = 22,
+	}, panel)
+	corner(close, 8)
+	make("UITextSizeConstraint", { MaxTextSize = 20 }, close)
+	close.Activated:Connect(onClose)
+
+	return {
+		shade = shade,
+		panel = panel,
+		title = title,
+		date = date,
+		body = body,
+		play = play,
+		close = close,
 	}
 end
 
@@ -692,6 +841,20 @@ function UI.build(playerGui: Instance, callbacks): any
 	local overlay = buildOverlay(root, callbacks.onStart)
 	overlay.shop.Activated:Connect(callbacks.onOpenShop)
 
+	local dailyPanel
+	dailyPanel = buildDailyPanel(root, function()
+		dailyPanel.shade.Visible = false
+		callbacks.onPlayDaily()
+	end, function()
+		dailyPanel.shade.Visible = false
+	end)
+	-- Rendered on open rather than waiting for the next snapshot, so the panel
+	-- never appears holding the last player's numbers for a tenth of a second.
+	overlay.daily.Activated:Connect(function()
+		renderDaily(dailyPanel, dailyPanel.lastProfile)
+		dailyPanel.shade.Visible = true
+	end)
+
 	return {
 		screen = screen,
 		root = root,
@@ -700,6 +863,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		hint = hint,
 		topBar = buildTopBar(root),
 		hypeMeter = buildHypeMeter(root),
+		dailyPanel = dailyPanel,
 		plateReadout = buildPlateReadout(prep),
 		searMeter = buildSearMeter(prep),
 		keyGrid = buildKeyGrid(prep, callbacks.onKey),
@@ -720,6 +884,70 @@ local IDLE_BODY = table.concat({
 	"",
 	"Build each order top to bottom, in the order listed on their ticket.",
 }, "\n")
+
+-- Today's challenge, drawn from DailyDefs rather than from a remote: the
+-- challenge is a pure function of the date, so the client can work out what it
+-- is on its own. Only the player's own record has to come from the server.
+--
+-- Assigned to the local forward declared near buildDailyPanel, above.
+function renderDaily(panel, profile)
+	if not profile then
+		return
+	end
+
+	local status = profile.daily
+	if not status then
+		return
+	end
+
+	-- Built from the day number the SERVER sent, never from the client's own
+	-- clock. A machine set a day fast would otherwise show a menu that is not
+	-- the one about to be cooked.
+	local challenge = DailyDefs.challengeFor(status.day)
+
+	panel.date.Text = string.format("%s  .  resets at midnight UTC", challenge.date)
+
+	local lines = { "TODAY'S MENU", "" }
+	for _, dishId in challenge.menu do
+		local dish = DishDefs.get(dishId)
+		table.insert(lines, "   " .. (if dish then dish.displayName else dishId))
+	end
+
+	local weather = HypeDefs.weather(challenge.weather)
+	table.insert(lines, "")
+	table.insert(lines, string.format("WEATHER   %s -- %s", weather.name, weather.blurb))
+	table.insert(lines, "")
+
+	-- Worth saying outright. The fixed loadout is the point of the mode, and a
+	-- player who does not know it will read their lower score as a bad run.
+	table.insert(lines,
+		"Everyone cooks this same shift, on the same tickets, with none of "
+			.. "your upgrades. Pure skill.")
+	table.insert(lines, "")
+
+	if status.played then
+		table.insert(lines, string.format(
+			"Today's score  %d      Reward already claimed.", status.score))
+		table.insert(lines, "Play again to beat it -- the score counts, the cash does not.")
+		panel.play.Text = "TRY AGAIN"
+		panel.play.BackgroundColor3 = COLOR.panelHi
+		panel.play.TextColor3 = COLOR.text
+	else
+		table.insert(lines, string.format(
+			"Not played yet today. Finishing pays %d c plus %d c per hundred points.",
+			Config.DAILY_REWARD_BASE,
+			math.floor(Config.DAILY_REWARD_PER_POINT * 100 + 0.5)))
+		panel.play.Text = "COOK IT"
+		panel.play.BackgroundColor3 = COLOR.good
+		panel.play.TextColor3 = COLOR.bg
+	end
+
+	if (status.streak or 0) > 1 then
+		table.insert(lines, string.format("Streak  %d days", status.streak))
+	end
+
+	panel.body.Text = table.concat(lines, "\n")
+end
 
 -- Declared above UI.render because that is the only thing that calls it, and a
 -- local declared below its caller resolves to nil at runtime.
@@ -778,11 +1006,16 @@ function UI.render(refs, snapshot)
 		refs.overlay.start.Text = "PLAN THE DAY  [E]"
 	elseif state == "Results" then
 		local stats = snapshot.stats
-		refs.overlay.title.Text = string.format("SHIFT OVER . %d c", snapshot.score)
+		local heading = if snapshot.isDaily then "DAILY DONE" else "SHIFT OVER"
+		refs.overlay.title.Text = string.format("%s . %d c", heading, snapshot.score)
 		if snapshot.profile and snapshot.profile.lastEarned then
-			refs.overlay.title.Text = string.format(
-				"SHIFT OVER . %d pts . +%d c",
-				snapshot.score, snapshot.profile.lastEarned)
+			-- A daily replay pays nothing, and saying "+0 c" reads as a bug
+			-- rather than as the rule it is.
+			refs.overlay.title.Text = if snapshot.isDaily and snapshot.profile.lastEarned == 0
+				then string.format("%s . %d pts . already claimed today", heading, snapshot.score)
+				else string.format(
+					"%s . %d pts . +%d c",
+					heading, snapshot.score, snapshot.profile.lastEarned)
 		end
 		refs.overlay.body.Text = table.concat({
 			string.format("Perfect %d      Good %d      Sloppy %d", stats.perfect, stats.good, stats.sloppy),
@@ -809,6 +1042,18 @@ function UI.render(refs, snapshot)
 	refs.topBar.combo.TextColor3 = if snapshot.combo > 0 then COLOR.perfect else COLOR.dim
 
 	renderHype(refs.hypeMeter, snapshot)
+
+	-- Kept current so the panel can render the instant it is opened.
+	refs.dailyPanel.lastProfile = snapshot.profile
+
+	-- The daily panel only makes sense between shifts. Closing it on the way
+	-- into service also covers the case where the shift was started by the
+	-- keyboard rather than by its own button.
+	if state ~= "Idle" then
+		refs.dailyPanel.shade.Visible = false
+	elseif refs.dailyPanel.shade.Visible then
+		renderDaily(refs.dailyPanel, snapshot.profile)
+	end
 
 	-- Which order is selected drives the key labels and the plate readout.
 	local activeOrder = nil

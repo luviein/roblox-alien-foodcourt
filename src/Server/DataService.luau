@@ -61,6 +61,15 @@ local DEFAULT = {
 
 	rebirths = 0,
 
+	-- The daily challenge. `date` is the UTC stamp the score belongs to, so a
+	-- record from yesterday reads as "not played today" without needing to be
+	-- cleared at midnight by anything. `streak` counts consecutive days played.
+	daily = {
+		date = "",
+		score = 0,
+		streak = 0,
+	},
+
 	stats = {
 		shifts = 0,
 		served = 0,

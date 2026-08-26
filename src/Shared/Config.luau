@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "noword-34"
+Config.BUILD = "daily-35"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -118,6 +118,19 @@ Config.REBIRTH_HYPE_STEP = 0.02
 -- A dish stays stale for this many days after you serve it. Two, so you cannot
 -- simply alternate between two menus and never pay a repeat penalty.
 Config.MENU_STALE_DAYS = 2
+
+-- ---------------------------------------------------------------- daily ----
+-- What finishing the daily challenge pays, once per day. The flat part is for
+-- turning up at all; the per-point part is what makes a good run worth chasing.
+--
+-- Sized against a normal shift, which pays roughly 180 c early on. A middling
+-- daily lands near 250 and a strong one near 400 -- worth about two ordinary
+-- days, which is enough to be the first thing you do when you log in without
+-- being so much that the restaurant stops mattering.
+--
+-- Only the FIRST run each day pays. Replays still record a better score.
+Config.DAILY_REWARD_BASE = 120
+Config.DAILY_REWARD_PER_POINT = 0.12
 
 -- ---------------------------------------------------------------- input ----
 -- "reject"  : a wrong key is refused outright with a short fumble lockout.
