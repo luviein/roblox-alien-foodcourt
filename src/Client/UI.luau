@@ -658,15 +658,7 @@ local function buildRailButton(parent: Instance, label: string, order: number)
 	corner(badge, 999)
 	make("UITextSizeConstraint", { MaxTextSize = 16 }, badge)
 
-	return {
-		button = button,
-		badge = badge,
-		caption = caption,
-		-- Set by UI.render. Declared here so the shape of this table is honest
-		-- under --!strict, and true by default so the button works before the
-		-- first snapshot lands.
-		enabled = true,
-	}
+	return { button = button, badge = badge, caption = caption }
 end
 
 -- What is running right now and how long is left on it. Sits under the side
@@ -1156,11 +1148,12 @@ function UI.build(playerGui: Instance, callbacks): any
 	-- Rendered on open rather than waiting for the next snapshot, so the panel
 	-- never appears holding stale numbers for a tenth of a second.
 	--
-	-- Refuses to open mid-shift: the rail stays on screen during service so
-	-- boost timers remain readable, but stopping to read task progress with
-	-- four tickets going is not a thing to offer.
+	-- Opens at any time, shift or no shift. A second press closes it, so the
+	-- icon is a toggle and never a one-way door into a panel the player has
+	-- to hunt for the way out of.
 	dailyButton.button.Activated:Connect(function()
-		if not dailyButton.enabled then
+		if dailyPanel.shade.Visible then
+			dailyPanel.shade.Visible = false
 			return
 		end
 		renderDaily(dailyPanel, dailyPanel.lastProfile)
@@ -1393,18 +1386,16 @@ function UI.render(refs, snapshot)
 	refs.dailyPanel.lastProfile = snapshot.profile
 
 	-- The rail stays up during service so a running boost is still readable,
-	-- but the panel behind it closes: reading task progress mid-shift is not
-	-- something to offer with four tickets going.
+	-- The rail works during service as well, and the panel stays open across
+	-- the start of a shift rather than being slammed shut under the player.
+	--
+	-- Opening it mid-shift costs customers: the clock keeps running behind it
+	-- and the shade covers the tickets. That is the player's call to make, and
+	-- the shift timer is on screen directly above the panel while they make
+	-- it. Cooking keys still reach the kitchen, so it is not a trap.
 	local daily = snapshot.profile and snapshot.profile.daily
-	local railUsable = state ~= "Service"
-	refs.dailyButton.enabled = railUsable
-	refs.dailyButton.button.Active = railUsable
-	refs.dailyButton.button.BackgroundColor3 =
-		if railUsable then COLOR.panel else COLOR.bg
 
-	if state == "Service" then
-		refs.dailyPanel.shade.Visible = false
-	elseif refs.dailyPanel.shade.Visible then
+	if refs.dailyPanel.shade.Visible then
 		renderDaily(refs.dailyPanel, snapshot.profile)
 	end
 
