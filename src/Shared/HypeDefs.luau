@@ -177,11 +177,37 @@ end
 -- Flattens the last few days of menus into one set of "served too recently"
 -- dish ids. Shared so the draft preview and the shift itself cannot disagree
 -- about what counts as stale.
-function HypeDefs.staleSet(recentMenus): { [string]: boolean }
+-- Which dishes were served recently enough to cost hype if drafted again.
+--
+-- `unlockedCount` and `slots` are optional, and when both are given they cap
+-- how much of the menu can be stale at once. That cap is the important part:
+-- with five dishes unlocked and three slots, a plain history lookup marks
+-- almost everything TOO SOON and there is no draft that avoids it. A penalty
+-- you cannot play around is not a decision, it is a tax on being new.
+--
+-- The cap leaves at least `slots` dishes fresh, so a clean menu always exists.
+-- It stops mattering as the catalogue grows: at fifteen dishes it never binds,
+-- and the full history applies again.
+function HypeDefs.staleSet(recentMenus, unlockedCount: number?, slots: number?): { [string]: boolean }
 	local set = {}
+	local count = 0
+
+	local cap = math.huge
+	if unlockedCount and slots then
+		cap = math.max(0, unlockedCount - slots)
+	end
+
+	-- recentMenus is newest first, so trimming at the cap keeps the dishes
+	-- served most recently stale and quietly lets the oldest go fresh again.
 	for _, menu in (recentMenus or {}) do
 		for _, dishId in menu do
-			set[dishId] = true
+			if not set[dishId] then
+				if count >= cap then
+					return set
+				end
+				set[dishId] = true
+				count += 1
+			end
 		end
 	end
 	return set

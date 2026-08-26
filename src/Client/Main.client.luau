@@ -116,6 +116,12 @@ local function endShiftNow()
 	sendAction({ action = "endShift" })
 end
 
+-- Testing: start a boost without waiting on a lucky prize roll. Server-gated
+-- on Config.DEBUG_COMMANDS like the rest.
+local function grantBoost(effect: string, seconds: number?)
+	sendAction({ action = "grantBoost", effect = effect, seconds = seconds })
+end
+
 -- Outside a shift, E opens the draft rather than starting immediately: the
 -- menu is the first decision of the day, not a detail to skip past. From the
 -- results screen it still just means "continue".
@@ -259,6 +265,17 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 		return Enum.ContextActionResult.Pass
 	end
 
+	-- Testing: F7 and F8 start a boost. Function keys because they collide with
+	-- nothing, in or out of a shift, so they work on either screen. The server
+	-- ignores both unless Config.DEBUG_COMMANDS is on.
+	if keyCode == Enum.KeyCode.F7 then
+		grantBoost("earnings")
+		return Enum.ContextActionResult.Sink
+	elseif keyCode == Enum.KeyCode.F8 then
+		grantBoost("tips")
+		return Enum.ContextActionResult.Sink
+	end
+
 	-- E doubles as an ingredient key during service and as the start/continue
 	-- key outside it. Gating on state keeps both bindings clean.
 	if not inService then
@@ -295,7 +312,7 @@ local BOUND_KEYS = {
 	Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.F, Enum.KeyCode.G,
 	Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,
 	Enum.KeyCode.Space, Enum.KeyCode.X, Enum.KeyCode.C,
-	Enum.KeyCode.Backspace,
+	Enum.KeyCode.Backspace, Enum.KeyCode.F7, Enum.KeyCode.F8,
 }
 
 -- Sinking Space also stops the character jumping under the UI, which is what
@@ -313,15 +330,34 @@ if Config.DEBUG_COMMANDS then
 	task.spawn(function()
 		local ok, err = pcall(function()
 			local TextChatService = game:GetService("TextChatService")
-			local command = Instance.new("TextChatCommand")
-			command.Name = "EndShiftCommand"
-			command.PrimaryAlias = "/endshift"
-			command.SecondaryAlias = "/es"
-			command.Triggered:Connect(endShiftNow)
-			command.Parent = TextChatService
+
+			local function register(name: string, alias: string, short: string?, run)
+				local command = Instance.new("TextChatCommand")
+				command.Name = name
+				command.PrimaryAlias = alias
+				if short then
+					command.SecondaryAlias = short
+				end
+				command.Triggered:Connect(run)
+				command.Parent = TextChatService
+			end
+
+			register("EndShiftCommand", "/endshift", "/es", endShiftNow)
+
+			-- Triggered passes (textSource, message), where message is the whole
+			-- line including the alias. Everything after it is the argument, so
+			-- "/boost tips 60" is a tip boost for a minute.
+			register("BoostCommand", "/boost", "/b", function(_source, message)
+				local words = string.split(message or "", " ")
+				local effect = words[2]
+				local seconds = tonumber(words[3])
+				grantBoost(
+					if effect == "tips" or effect == "tip" then "tips" else "earnings",
+					seconds)
+			end)
 		end)
 		if not ok then
-			warn("[AFC] /endshift unavailable, use Backspace instead: " .. tostring(err))
+			warn("[AFC] chat commands unavailable, use Backspace / F7 / F8: " .. tostring(err))
 		end
 	end)
 end

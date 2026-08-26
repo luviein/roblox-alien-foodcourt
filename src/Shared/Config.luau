@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "tests-45"
+Config.BUILD = "staleness-46"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -115,9 +115,18 @@ Config.BASE_HYPE = 0.25
 -- works a permanently busier counter than a fresh one.
 Config.REBIRTH_HYPE_STEP = 0.02
 
--- A dish stays stale for this many days after you serve it. Two, so you cannot
--- simply alternate between two menus and never pay a repeat penalty.
-Config.MENU_STALE_DAYS = 2
+-- A dish stays stale for this many days after you serve it.
+--
+-- Was two, to stop anyone alternating between two menus forever without ever
+-- paying a repeat penalty. That reasoning only holds with a big catalogue: at
+-- five dishes unlocked and three slots, two days of history is six dish-slots
+-- of staleness over five dishes, so the draft screen was a wall of TOO SOON
+-- with no menu that avoided it.
+--
+-- One day, plus the cap in HypeDefs.staleSet that always leaves enough fresh
+-- dishes to fill the board. The anti-alternating argument is handled by that
+-- cap lifting as the catalogue grows.
+Config.MENU_STALE_DAYS = 1
 
 -- --------------------------------------------------------------- boosts ----
 -- Temporary buffs, won from the daily prize pool.

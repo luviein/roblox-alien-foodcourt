@@ -219,7 +219,13 @@ local function loadoutFor(player: Player, chosen: { string }?)
 	end
 
 	local conditions = conditionsFor(player)
-	local stale = HypeDefs.staleSet(profile and profile.recentMenus)
+
+	-- The unlocked count and slot count go in so staleness can cap itself and
+	-- always leave a draftable fresh menu. `allowed` was built from the same
+	-- list above, so #unlocked is what the player can actually choose from.
+	local unlocked = unlockedMenu(profile)
+	local stale = HypeDefs.staleSet(
+		profile and profile.recentMenus, #unlocked, slots)
 	local upgrades = (profile and profile.upgrades) or {}
 	local earningsBoost, tipBoost = DailyDefs.boostValues(profile and profile.boosts)
 
@@ -342,6 +348,32 @@ local function onStationAction(player: Player, payload: any)
 			return
 		end
 		kitchen:endShiftNow()
+		pushSnapshot(player)
+		return
+
+	elseif action == "grantBoost" then
+		-- Testing only. Starts a boost without waiting on a daily task and a
+		-- lucky roll, which is otherwise the only way to see one.
+		if not Config.DEBUG_COMMANDS then
+			return
+		end
+
+		local effect = if payload.effect == "tips" then "tips" else "earnings"
+		local seconds = if typeof(payload.seconds) == "number"
+			then math.clamp(payload.seconds, 5, 3600)
+			else Config.BOOST_SECONDS
+
+		DataService.update(player, function(data)
+			DailyDefs.grantBoost(data.boosts, {
+				kind = "boost",
+				effect = effect,
+				seconds = seconds,
+				-- Mid-range rather than random, so a test run is repeatable.
+				value = if effect == "earnings" then 0.20 else nil,
+			})
+		end)
+
+		DataService.save(player)
 		pushSnapshot(player)
 		return
 

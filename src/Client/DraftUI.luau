@@ -486,9 +486,16 @@ function DraftUI.render(refs, profile)
 	refs.weatherLabel.Text = string.upper(conditions.weatherName or "")
 	refs.weatherBlurb.Text = conditions.weatherBlurb or ""
 
-	-- Same helper the server uses, so the preview cannot disagree about what
-	-- counts as served too recently.
-	local stale = HypeDefs.staleSet(profile.recentMenus)
+	-- Same helper the server uses, with the same arguments, so the preview
+	-- cannot disagree with the shift about what counts as served too recently.
+	-- The counts let staleness cap itself so a fresh menu always exists.
+	local unlockedCount = 0
+	for _, dishId in DishDefs.ActiveMenu do
+		if profile.unlocked[dishId] then
+			unlockedCount += 1
+		end
+	end
+	local stale = HypeDefs.staleSet(profile.recentMenus, unlockedCount, slots)
 
 	-- Rows are built once, on first render, since the unlocked set only grows
 	-- between shifts and never during this screen.

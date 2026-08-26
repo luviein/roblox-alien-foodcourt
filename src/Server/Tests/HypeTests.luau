@@ -145,6 +145,31 @@ return function()
 	t:check("anything else is absent", stale.ramen == nil)
 	t:equal("nil is handled", next(HypeDefs.staleSet(nil)), nil)
 
+	-- The cap. A player with five dishes and three slots must always be able
+	-- to draft something fresh, or the draft screen is a wall of TOO SOON with
+	-- no move that avoids it.
+	local function setSize(set): number
+		local size = 0
+		for _ in set do
+			size += 1
+		end
+		return size
+	end
+
+	local capped = HypeDefs.staleSet({ { "a", "b", "c" }, { "d", "e" } }, 5, 3)
+	t:equal("staleness caps at unlocked minus slots", setSize(capped), 2)
+	t:check("keeping the most recently served stale", capped.a == true and capped.b == true)
+	t:check("and letting older ones go fresh", capped.c == nil and capped.d == nil)
+
+	local roomy = HypeDefs.staleSet({ { "a", "b", "c" } }, 15, 3)
+	t:equal("a large catalogue keeps the whole history", setSize(roomy), 3)
+
+	local tight = HypeDefs.staleSet({ { "a", "b", "c" } }, 3, 3)
+	t:equal("nothing is stale with only just enough dishes", setSize(tight), 0)
+
+	local uncapped = HypeDefs.staleSet({ { "a", "b", "c" } })
+	t:equal("no counts means no cap", setSize(uncapped), 3)
+
 	-- ------------------------------------------------------------- weather --
 
 	local rolled = HypeDefs.rollWeather(Random.new(1))
