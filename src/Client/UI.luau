@@ -919,17 +919,36 @@ local function renderOffline(panel, profile)
 	end
 
 	panel.shade.Visible = true
-	panel.span.Text = string.format(
-		"%s unattended  .  station licence maintained",
-		OfflineDefs.formatSpan(pending.seconds or 0))
 
-	panel.body.Text = table.concat({
+	local held = pending.seconds or 0
+	local elapsed = math.max(pending.elapsed or held, held)
+	local overflow = elapsed - held
+
+	-- Once the cell fills it stops recording, and saying only how long it ran
+	-- would tell someone away for three days that they were away for eight
+	-- hours. The unrecorded remainder is named, which is also the moment the
+	-- Continuity Cell upgrade explains itself.
+	panel.span.Text = if pending.capped and overflow > 60
+		then string.format(
+			"Cell filled after %s  .  %s went unrecorded",
+			OfflineDefs.formatSpan(held), OfflineDefs.formatSpan(overflow))
+		else string.format(
+			"%s unattended  .  station licence maintained",
+			OfflineDefs.formatSpan(held))
+
+	panel.span.TextColor3 = if pending.capped then COLOR.warn else COLOR.dim
+
+	local lines = {
 		string.format("Ran your shift %d times.", pending.ran or 0),
 		string.format("Served %d. %d left.", pending.served or 0, pending.left or 0),
 		string.format("%d asked where you were.", pending.asked or 0),
 		"",
-		"Recording degraded. Please return to your counter.",
-	}, "\n")
+	}
+	table.insert(lines, if pending.capped
+		then "Cell exhausted. A larger one records longer."
+		else "Recording degraded. Please return to your counter.")
+
+	panel.body.Text = table.concat(lines, "\n")
 
 	panel.note.Text = string.format(
 		'"%s"\n                              - Zorb, Continuity Supervisor',

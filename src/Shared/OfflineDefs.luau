@@ -84,7 +84,13 @@ function OfflineDefs.accrue(profile, seconds: number)
 	local perShift = OfflineDefs.perShift(profile and profile.recentEarnings)
 
 	local report = {
+		-- `seconds` is what the cell actually held and paid for. `elapsed` is
+		-- how long they were really gone. They differ once the cell fills, and
+		-- the collect screen has to show both -- reporting only the capped
+		-- figure told someone away for three days that they had been away for
+		-- eight hours.
 		seconds = counted,
+		elapsed = math.max(seconds, 0),
 		capped = seconds > capSeconds,
 		amount = 0,
 		ran = 0,
@@ -139,20 +145,27 @@ function OfflineDefs.addPending(pending, report)
 
 	pending.amount = (pending.amount or 0) + report.amount
 	pending.seconds = (pending.seconds or 0) + report.seconds
+	pending.elapsed = (pending.elapsed or 0) + (report.elapsed or report.seconds)
 	pending.ran = (pending.ran or 0) + report.ran
 	pending.served = (pending.served or 0) + report.served
 	pending.left = (pending.left or 0) + report.left
 	pending.asked = math.max(pending.asked or 0, report.asked)
+
+	-- Sticky. If any absence folded in here overflowed the cell, the collect
+	-- screen still has to admit it.
+	pending.capped = (pending.capped == true) or (report.capped == true)
 	return pending
 end
 
 function OfflineDefs.clearPending(pending)
 	pending.amount = 0
 	pending.seconds = 0
+	pending.elapsed = 0
 	pending.ran = 0
 	pending.served = 0
 	pending.left = 0
 	pending.asked = 0
+	pending.capped = false
 end
 
 -- ------------------------------------------------------------------ report --

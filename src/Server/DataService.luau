@@ -77,7 +77,11 @@ local DEFAULT = {
 	-- before collecting does not lose it.
 	pendingOffline = {
 		amount = 0,
+		-- `seconds` is what the cell held and paid for; `elapsed` is the real
+		-- absence. They part company once the cell fills.
 		seconds = 0,
+		elapsed = 0,
+		capped = false,
 		ran = 0,
 		served = 0,
 		left = 0,

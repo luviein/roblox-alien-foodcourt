@@ -60,6 +60,12 @@ return function()
 	t:check("being over the cap is reported", capped.capped)
 	t:check("being under it is not", not atCap.capped)
 
+	-- The real absence is kept alongside the part that was paid for, or the
+	-- collect screen tells someone away for days that they were away for hours.
+	t:equal("the true absence is remembered", capped.elapsed, 40 * HOUR)
+	t:check("and is longer than what the cell held", capped.elapsed > capped.seconds)
+	t:equal("an uncapped absence has them equal", atCap.elapsed, atCap.seconds)
+
 	local bigger = OfflineDefs.accrue(player({ upgrades = { cell = 3 } }), 40 * HOUR)
 	t:check("a bigger cell earns more from the same absence",
 		bigger.amount > capped.amount)
@@ -120,9 +126,18 @@ return function()
 	t:equal("and adds the second", pending.amount, report.amount * 2)
 	t:equal("along with its time", pending.seconds, report.seconds * 2)
 
+	-- A capped absence folded into the pot has to stay flagged, or the overflow
+	-- goes unmentioned the moment two returns are collected together.
+	local mixed = { amount = 0, seconds = 0, elapsed = 0, ran = 0, served = 0, left = 0, asked = 0, capped = false }
+	OfflineDefs.addPending(mixed, OfflineDefs.accrue(player(), 2 * HOUR))
+	t:check("an uncapped return leaves the pot uncapped", not mixed.capped)
+	OfflineDefs.addPending(mixed, OfflineDefs.accrue(player(), 40 * HOUR))
+	t:check("a capped one flags the whole pot", mixed.capped)
+
 	OfflineDefs.clearPending(pending)
 	t:equal("collecting empties the pot", pending.amount, 0)
 	t:equal("and its story", pending.ran, 0)
+	t:equal("and its overflow flag", pending.capped, false)
 
 	local ignored = { amount = 5, seconds = 0, ran = 0, served = 0, left = 0, asked = 0 }
 	OfflineDefs.addPending(ignored, OfflineDefs.accrue(player(), 0))
