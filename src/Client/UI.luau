@@ -653,7 +653,115 @@ local function buildRailButton(parent: Instance, label: string, order: number)
 	corner(badge, 999)
 	make("UITextSizeConstraint", { MaxTextSize = 16 }, badge)
 
-	return { button = button, badge = badge, caption = caption }
+	return {
+		button = button,
+		badge = badge,
+		caption = caption,
+		-- Set by UI.render. Declared here so the shape of this table is honest
+		-- under --!strict, and true by default so the button works before the
+		-- first snapshot lands.
+		enabled = true,
+	}
+end
+
+-- What is running right now and how long is left on it. Sits under the side
+-- rail, on the left edge, where the daily panel that granted it also lives.
+--
+-- Boosts are the one thing in the game with a clock the player did not start,
+-- so they need to be visible without opening anything -- otherwise a fifteen
+-- minute prize quietly expires unnoticed and reads as never having worked.
+local BOOST_ROWS = {
+	{ key = "earnings", label = "EARNINGS", color = COLOR.perfect },
+	{ key = "tips",     label = "TIPS",     color = COLOR.good },
+}
+
+local function buildBoostStrip(parent: Instance)
+	local frame = make("Frame", {
+		Name = "Boosts",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.012, 0.72),
+		Size = UDim2.fromScale(0.19, 0.11),
+		ZIndex = 12,
+	}, parent)
+
+	local rows = {}
+	for index, spec in BOOST_ROWS do
+		local row = make("Frame", {
+			Name = spec.label,
+			BackgroundColor3 = COLOR.panel,
+			BackgroundTransparency = 0.15,
+			BorderSizePixel = 0,
+			Position = UDim2.fromScale(0, (index - 1) * 0.54),
+			Size = UDim2.fromScale(1, 0.46),
+			Visible = false,
+			ZIndex = 12,
+		}, frame)
+		corner(row, 6)
+
+		local pip = make("Frame", {
+			Name = "Pip",
+			BackgroundColor3 = spec.color,
+			BorderSizePixel = 0,
+			Position = UDim2.fromScale(0.04, 0.3),
+			Size = UDim2.fromScale(0.05, 0.4),
+			ZIndex = 13,
+		}, row)
+		corner(pip, 999)
+
+		local label = make("TextLabel", {
+			Name = "Label",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.13, 0.15),
+			Size = UDim2.fromScale(0.55, 0.7),
+			Font = Enum.Font.GothamBold,
+			Text = spec.label,
+			TextColor3 = spec.color,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = 13,
+		}, row)
+		make("UITextSizeConstraint", { MaxTextSize = 14 }, label)
+
+		local clock = make("TextLabel", {
+			Name = "Clock",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.6, 0.15),
+			Size = UDim2.fromScale(0.36, 0.7),
+			Font = Enum.Font.GothamBold,
+			Text = "",
+			TextColor3 = COLOR.text,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			ZIndex = 13,
+		}, row)
+		make("UITextSizeConstraint", { MaxTextSize = 14 }, clock)
+
+		rows[spec.key] = { frame = row, label = label, clock = clock }
+	end
+
+	return { frame = frame, rows = rows }
+end
+
+local function renderBoosts(strip, profile)
+	local boosts = profile and profile.boosts
+
+	for _, spec in BOOST_ROWS do
+		local row = strip.rows[spec.key]
+		local slot = boosts and boosts[spec.key]
+		local remaining = (slot and slot.remaining) or 0
+
+		row.frame.Visible = remaining > 0
+		if remaining > 0 then
+			row.clock.Text = formatTime(remaining)
+
+			-- The earnings boost rolls its strength when it is won, so the
+			-- label has to carry the number: two players with this prize are
+			-- not on the same rate.
+			row.label.Text = if spec.key == "earnings" and slot.value
+				then string.format("+%d%% CASH", math.floor((slot.value or 0) * 100 + 0.5))
+				else spec.label
+		end
+	end
 end
 
 -- Forward declared. The daily button's click handler is built here but runs
@@ -1037,10 +1145,18 @@ function UI.build(playerGui: Instance, callbacks): any
 
 	local rail = buildSideRail(root)
 	local dailyButton = buildRailButton(rail, "DAILY", 1)
+	local boostStrip = buildBoostStrip(root)
 
 	-- Rendered on open rather than waiting for the next snapshot, so the panel
 	-- never appears holding stale numbers for a tenth of a second.
+	--
+	-- Refuses to open mid-shift: the rail stays on screen during service so
+	-- boost timers remain readable, but stopping to read task progress with
+	-- four tickets going is not a thing to offer.
 	dailyButton.button.Activated:Connect(function()
+		if not dailyButton.enabled then
+			return
+		end
 		renderDaily(dailyPanel, dailyPanel.lastProfile)
 		dailyPanel.shade.Visible = true
 	end)
@@ -1056,6 +1172,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		rail = rail,
 		dailyButton = dailyButton,
 		dailyPanel = dailyPanel,
+		boostStrip = boostStrip,
 		plateReadout = buildPlateReadout(prep),
 		searMeter = buildSearMeter(prep),
 		keyGrid = buildKeyGrid(prep, callbacks.onKey),
@@ -1144,9 +1261,20 @@ function renderDaily(panel, profile)
 	local won = profile.lastPrize
 	if won and won.serial and won.serial ~= panel.shownPrizeSerial then
 		panel.shownPrizeSerial = won.serial
-		panel.prize.Text = if won.kind == "cash"
-			then string.format("%s  .  +%d c", won.name, won.amount)
-			else won.name
+
+		local minutes = math.floor((won.seconds or 0) / 60 + 0.5)
+		if won.kind == "cash" then
+			panel.prize.Text = string.format("%s  .  +%d c", won.name, won.amount)
+		elseif won.effect == "earnings" then
+			panel.prize.Text = string.format(
+				"%s  .  +%d%% cash for %d min",
+				won.name, math.floor((won.value or 0) * 100 + 0.5), minutes)
+		elseif won.effect == "tips" then
+			panel.prize.Text = string.format(
+				"%s  .  customers tip for %d min", won.name, minutes)
+		else
+			panel.prize.Text = won.name
+		end
 	end
 end
 
@@ -1242,10 +1370,14 @@ function UI.render(refs, snapshot)
 	-- Kept current so the panel can render the instant it is opened.
 	refs.dailyPanel.lastProfile = snapshot.profile
 
-	-- The rail is for between shifts. Hiding it during service keeps the
-	-- cooking screen clear, and closes the panel if a shift starts under it.
+	-- The rail stays up during service so a running boost is still readable,
+	-- but the panel behind it closes: reading task progress mid-shift is not
+	-- something to offer with four tickets going.
 	local daily = snapshot.profile and snapshot.profile.daily
-	refs.rail.Visible = state ~= "Service"
+	refs.dailyButton.enabled = state ~= "Service"
+	refs.dailyButton.button.BackgroundColor3 =
+		if state == "Service" then COLOR.bg else COLOR.panel
+
 	if state == "Service" then
 		refs.dailyPanel.shade.Visible = false
 	elseif refs.dailyPanel.shade.Visible then
@@ -1257,6 +1389,8 @@ function UI.render(refs, snapshot)
 	local claimable = (daily and daily.claimable) or 0
 	refs.dailyButton.badge.Visible = claimable > 0
 	refs.dailyButton.badge.Text = tostring(claimable)
+
+	renderBoosts(refs.boostStrip, snapshot.profile)
 
 	-- Which order is selected drives the key labels and the plate readout.
 	local activeOrder = nil

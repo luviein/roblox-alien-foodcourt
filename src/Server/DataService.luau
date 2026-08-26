@@ -72,6 +72,15 @@ local DEFAULT = {
 		streak = 0,
 	},
 
+	-- Temporary buffs won from the prize pool. `remaining` is seconds and only
+	-- counts down while the player is in the game, so a prize is never burned
+	-- while they are logged off. `value` on the earnings slot is the fraction
+	-- rolled when it was won.
+	boosts = {
+		earnings = { remaining = 0, value = 0 },
+		tips = { remaining = 0 },
+	},
+
 	stats = {
 		shifts = 0,
 		served = 0,

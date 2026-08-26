@@ -15,6 +15,8 @@
 -- from the same table the server pays out from.
 
 
+local Config = require(script.Parent.Config)
+
 local DailyDefs = {}
 
 local SECONDS_PER_DAY = 86400
@@ -154,16 +156,39 @@ end
 -- What claiming a finished task pays. Weighted, and rolled per claim rather
 -- than per day: a prize everyone can look up is not a prize.
 --
--- Everything here is cash for now because cash is the only reward the game
--- has. Pets and boosts drop in as new `kind`s when they exist, and the panel
--- reads `name` either way.
+-- Two kinds. `cash` pays out once. `boost` starts a timer instead, which is
+-- the more interesting prize: cash is a number that goes up, a boost is a
+-- reason to go and play another shift right now.
+--
+-- Pets drop in later as a third kind. The panel reads `name` whatever it is.
 DailyDefs.PrizePool = {
-	{ id = "credits_small",  weight = 40, kind = "cash", amount = 150,  name = "A handful of credits" },
-	{ id = "credits_mid",    weight = 32, kind = "cash", amount = 350,  name = "A decent tip jar" },
-	{ id = "credits_large",  weight = 20, kind = "cash", amount = 750,  name = "A very good day" },
-	{ id = "credits_huge",   weight = 8,  kind = "cash", amount = 1800, name = "Someone tipped in bullion" },
+	{ id = "credits_small", weight = 30, kind = "cash", amount = 150,  name = "A handful of credits" },
+	{ id = "credits_mid",   weight = 24, kind = "cash", amount = 350,  name = "A decent tip jar" },
+	{ id = "credits_large", weight = 14, kind = "cash", amount = 750,  name = "A very good day" },
+	{ id = "credits_huge",  weight = 6,  kind = "cash", amount = 1800, name = "Someone tipped in bullion" },
+
+	{
+		id = "boost_earnings",
+		weight = 16,
+		kind = "boost",
+		effect = "earnings",
+		name = "Station-wide write-up",
+	},
+	{
+		id = "boost_tips",
+		weight = 10,
+		kind = "boost",
+		effect = "tips",
+		name = "The locals are feeling generous",
+	},
 }
 
+-- Rolls a prize, and settles anything about it that varies.
+--
+-- An earnings boost picks its own strength here rather than carrying a fixed
+-- one, so two players who win the same prize do not walk away with the same
+-- number. The result is a fresh table, never the pool entry itself: handing
+-- back the definition would let a caller mutate the pool for everyone.
 function DailyDefs.rollPrize(rng: Random?)
 	local roll = rng or Random.new()
 
@@ -172,14 +197,98 @@ function DailyDefs.rollPrize(rng: Random?)
 		total += entry.weight
 	end
 
+	local chosen = DailyDefs.PrizePool[1]
 	local pick = roll:NextNumber() * total
 	for _, entry in DailyDefs.PrizePool do
 		pick -= entry.weight
 		if pick <= 0 then
-			return entry
+			chosen = entry
+			break
 		end
 	end
-	return DailyDefs.PrizePool[1]
+
+	local prize = {
+		id = chosen.id,
+		kind = chosen.kind,
+		name = chosen.name,
+		effect = chosen.effect,
+		amount = chosen.amount,
+		seconds = if chosen.kind == "boost" then Config.BOOST_SECONDS else nil,
+		value = nil :: number?,
+	}
+
+	if chosen.effect == "earnings" then
+		local range = Config.BOOST_EARNINGS_RANGE
+		-- Rounded to whole percent so the panel reads "+23%" rather than
+		-- "+23.4712%".
+		prize.value = math.floor(roll:NextNumber(range[1], range[2]) * 100 + 0.5) / 100
+	end
+
+	return prize
+end
+
+-- ------------------------------------------------------------------ boosts --
+
+-- What a boost is worth right now. Reads a profile's boost record and answers
+-- in the terms a shift actually needs, so callers never poke at `remaining`
+-- themselves.
+function DailyDefs.boostValues(boosts)
+	local earnings = 0
+	local tips = false
+
+	if typeof(boosts) == "table" then
+		local e = boosts.earnings
+		if typeof(e) == "table" and (e.remaining or 0) > 0 then
+			earnings = e.value or 0
+		end
+
+		local t = boosts.tips
+		if typeof(t) == "table" and (t.remaining or 0) > 0 then
+			tips = true
+		end
+	end
+
+	return earnings, tips
+end
+
+-- Starts or extends a boost. Winning one you already have adds its time on
+-- rather than replacing it, and keeps the BETTER strength -- being handed a
+-- worse write-up should never downgrade the one already running.
+function DailyDefs.grantBoost(boosts, prize)
+	if typeof(boosts) ~= "table" or prize.kind ~= "boost" then
+		return
+	end
+
+	local slot = boosts[prize.effect]
+	if typeof(slot) ~= "table" then
+		slot = { remaining = 0, value = 0 }
+		boosts[prize.effect] = slot
+	end
+
+	slot.remaining = (slot.remaining or 0) + (prize.seconds or 0)
+	if prize.value then
+		slot.value = math.max(slot.value or 0, prize.value)
+	end
+end
+
+-- Runs the clock down. Called from the server tick, so boosts only burn while
+-- the player is actually in the game. Returns true if anything expired, so the
+-- caller knows the shift loadout may be stale.
+function DailyDefs.tickBoosts(boosts, dt: number): boolean
+	if typeof(boosts) ~= "table" then
+		return false
+	end
+
+	local expired = false
+	for _, slot in boosts do
+		if typeof(slot) == "table" and (slot.remaining or 0) > 0 then
+			slot.remaining = math.max(0, slot.remaining - dt)
+			if slot.remaining == 0 then
+				expired = true
+			end
+		end
+	end
+	return expired
 end
 
 -- ----------------------------------------------------------------- record --

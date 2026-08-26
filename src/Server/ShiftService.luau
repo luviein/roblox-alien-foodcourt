@@ -29,6 +29,16 @@ local ShiftService = {}
 local kitchens: { [Player]: any } = {}
 local actionBudget: { [Player]: { count: number, windowStart: number } } = {}
 
+-- When each idle player was last sent a snapshot to keep a boost clock moving.
+local lastIdlePush: { [Player]: number } = {}
+
+-- Whether anything is currently counting down for this player.
+local function boostRunning(player: Player): boolean
+	local profile = DataService.get(player)
+	local earnings, tips = DailyDefs.boostValues(profile and profile.boosts)
+	return earnings > 0 or tips
+end
+
 -- Forward declared: pushSnapshot sends the day-s conditions along with every
 -- snapshot, and is defined above the roll that produces them.
 local conditionsFor
@@ -93,9 +103,13 @@ local function pushSnapshot(player: Player)
 			-- game open across midnight gets the new list without relogging.
 			daily = DailyDefs.statusOf(profile.daily),
 
-			-- The last prize won, so the panel can announce it. Cleared once
-			-- shown; see onStationAction's "seenPrize".
+			-- The last prize won, so the panel can announce it. The serial on
+			-- it is what stops the announcement repeating every snapshot.
 			lastPrize = kitchen.lastPrize,
+
+			-- Running boosts, so the HUD can show what is active and how long
+			-- is left on it.
+			boosts = profile.boosts,
 		}
 	end
 
@@ -117,6 +131,7 @@ end
 local function onPlayerRemoving(player: Player)
 	kitchens[player] = nil
 	actionBudget[player] = nil
+	lastIdlePush[player] = nil
 end
 
 -- --------------------------------------------------------------- remotes ---
@@ -206,6 +221,7 @@ local function loadoutFor(player: Player, chosen: { string }?)
 	local conditions = conditionsFor(player)
 	local stale = HypeDefs.staleSet(profile and profile.recentMenus)
 	local upgrades = (profile and profile.upgrades) or {}
+	local earningsBoost, tipBoost = DailyDefs.boostValues(profile and profile.boosts)
 
 	-- Where a neutral menu sits. Nothing in the shop moves this any more -- the
 	-- only permanent lift is rebirths, which are earned. Everything else about
@@ -231,7 +247,16 @@ local function loadoutFor(player: Player, chosen: { string }?)
 			+ ShopDefs.valueOf("patience", upgrades.patience or 0),
 		-- Applied to CASH at payout, never to score. Score stays comparable
 		-- between players; what it is worth does not.
-		cashMultiplier = 1 + ShopDefs.valueOf("tips", upgrades.tips or 0),
+		--
+		-- Boosts are read HERE, at the start of the shift, rather than at
+		-- payout: a boost that runs out with ten seconds of cooking left
+		-- should still pay for the shift it was there for. A ninety second
+		-- shift cannot be stretched far enough for that to be worth gaming.
+		cashMultiplier = 1 + ShopDefs.valueOf("tips", upgrades.tips or 0) + earningsBoost,
+
+		-- Flat cash per order served, on top of the score payout. Zero unless
+		-- a tip boost is running.
+		tipPerOrder = if tipBoost then Config.TIP_BOOST_PER_ORDER else 0,
 
 		hypeByPhase = hypeByPhase,
 		weather = conditions.weather,
@@ -337,6 +362,8 @@ local function onStationAction(player: Player, payload: any)
 			prize = DailyDefs.rollPrize()
 			if prize.kind == "cash" then
 				data.cash += prize.amount
+			elseif prize.kind == "boost" then
+				DailyDefs.grantBoost(data.boosts, prize)
 			end
 		end)
 
@@ -349,7 +376,10 @@ local function onStationAction(player: Player, payload: any)
 				serial = kitchen.prizeSerial,
 				name = prize.name,
 				kind = prize.kind,
+				effect = prize.effect,
 				amount = prize.amount,
+				value = prize.value,
+				seconds = prize.seconds,
 			}
 			DataService.save(player)
 		end
@@ -443,17 +473,36 @@ local function startTickLoop()
 				local before = kitchen.state
 				kitchen:tick()
 
+				-- Boost timers run here rather than off wall-clock stamps, so
+				-- they only burn while the player is actually in the game.
+				--
+				-- Routed through DataService.update so the profile is marked
+				-- dirty as it burns down. Mutating it directly would leave the
+				-- last SAVED value at the full duration, and relogging would
+				-- hand the boost back at full length, over and over.
+				if boostRunning(player) then
+					DataService.update(player, function(data)
+						DailyDefs.tickBoosts(data.boosts, interval)
+					end)
+				end
+
 				-- A shift that just ended pays into the profile. Doing it here
 				-- rather than inside Kitchen keeps the gameplay state machine
 				-- unaware of saving.
 				if before == "Service" and kitchen.state == "Results" then
 					-- Score is the skill number and stays big; cash is what
 					-- that skill is worth, and is deliberately a fraction.
+					--
+					-- Tips are added AFTER the multiplier rather than inside
+					-- it. They are already a flat per-order bonus, and running
+					-- them through an earnings boost as well would make two
+					-- prizes that stack quietly worth far more than either
+					-- reads.
 					local earned = math.floor(
 						kitchen.score
 							* kitchen.loadout.cashMultiplier
 							* Config.CASH_PER_POINT
-						+ 0.5)
+						+ 0.5) + (kitchen.tips or 0)
 					kitchen.lastEarned = earned
 
 					DataService.update(player, function(data)
@@ -478,8 +527,20 @@ local function startTickLoop()
 				end
 				-- Idle kitchens have nothing moving; skip the traffic unless
 				-- the state just changed.
+				--
+				-- A running boost is the exception. Its clock keeps ticking
+				-- between shifts, which is exactly when someone is most likely
+				-- watching it, and with no snapshot the countdown would sit
+				-- frozen on screen while the server quietly burned it down.
+				-- Once a second is enough for a mm:ss readout.
 				if kitchen.state ~= "Idle" or before ~= "Idle" then
 					pushSnapshot(player)
+				elseif boostRunning(player) then
+					local last = lastIdlePush[player] or 0
+					if os.clock() - last >= 1 then
+						lastIdlePush[player] = os.clock()
+						pushSnapshot(player)
+					end
 				end
 			end
 		end

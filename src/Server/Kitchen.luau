@@ -57,6 +57,7 @@ function Kitchen.new(participants: { Player })
 	self.build = {}
 
 	self.score = 0
+	self.tips = 0
 	self.combo = 0
 	self.bestCombo = 0
 	self.stats = {
@@ -117,6 +118,7 @@ function Kitchen:startShift(loadout)
 	self.activeOrderId = nil
 	self.build = {}
 	self.score = 0
+	self.tips = 0
 	self.combo = 0
 	self.bestCombo = 0
 	self.stats = {
@@ -369,6 +371,12 @@ function Kitchen:award(order, grade: string)
 	else
 		self.stats.served += 1
 		self.stats[string.lower(grade)] += 1
+
+		-- A tip boost pays flat cash per order, banked here and added to the
+		-- payout at the end. It deliberately never touches self.score: score
+		-- is the skill number and has to stay comparable between a boosted
+		-- shift and an unboosted one.
+		self.tips += self.loadout.tipPerOrder or 0
 	end
 
 	self:emit({

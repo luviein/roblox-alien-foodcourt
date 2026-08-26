@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "dailytasks-36"
+Config.BUILD = "boosts-37"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -118,6 +118,28 @@ Config.REBIRTH_HYPE_STEP = 0.02
 -- A dish stays stale for this many days after you serve it. Two, so you cannot
 -- simply alternate between two menus and never pay a repeat penalty.
 Config.MENU_STALE_DAYS = 2
+
+-- --------------------------------------------------------------- boosts ----
+-- Temporary buffs, won from the daily prize pool.
+--
+-- Their clock only runs while the player is IN the game. Burning a fifteen
+-- minute prize while someone is asleep would make winning one feel like a
+-- punishment for logging off, and the whole point of a boost is that it pulls
+-- you into playing another shift.
+Config.BOOST_SECONDS = 15 * 60
+
+-- What a tip boost pays per order served. Flat cash, not score, and not a
+-- multiplier: score stays the pure skill number, and a flat tip is legible in
+-- a way a percentage of a percentage is not. At roughly ten customers a shift
+-- this is about 60 c on top of a 180 c day.
+--
+-- It pays on any grade that is not a Fail. Tipping for a Sloppy plate is
+-- deliberate -- the boost is luck, not a second skill check.
+Config.TIP_BOOST_PER_ORDER = 6
+
+-- An earnings boost is rolled somewhere in this range when it is won, so two
+-- players who win the same prize do not get the same number.
+Config.BOOST_EARNINGS_RANGE = { 0.10, 0.30 }
 
 
 -- ---------------------------------------------------------------- input ----
