@@ -129,6 +129,13 @@ local function simulateAway(hours: number?)
 	sendAction({ action = "away", hours = hours })
 end
 
+-- Testing: bank a finished shift without cooking one. Unlike ending a shift
+-- early, this scores a competent day rather than a zero, so it can be used to
+-- reach anything that reads recent earnings.
+local function skipShift(count: number?)
+	sendAction({ action = "skipShift", count = count })
+end
+
 -- Outside a shift, E opens the draft rather than starting immediately: the
 -- menu is the first decision of the day, not a detail to skip past. From the
 -- results screen it still just means "continue".
@@ -294,6 +301,9 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 		-- developer console.
 		simulateAway(8)
 		return Enum.ContextActionResult.Sink
+	elseif keyCode == Enum.KeyCode.F5 then
+		skipShift(1)
+		return Enum.ContextActionResult.Sink
 	end
 
 	-- E doubles as an ingredient key during service and as the start/continue
@@ -332,7 +342,8 @@ local BOUND_KEYS = {
 	Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.F, Enum.KeyCode.G,
 	Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,
 	Enum.KeyCode.Space, Enum.KeyCode.X, Enum.KeyCode.C,
-	Enum.KeyCode.Backspace, Enum.KeyCode.F6, Enum.KeyCode.F7, Enum.KeyCode.F8,
+	Enum.KeyCode.Backspace,
+	Enum.KeyCode.F5, Enum.KeyCode.F6, Enum.KeyCode.F7, Enum.KeyCode.F8,
 }
 
 -- Sinking Space also stops the character jumping under the UI, which is what
@@ -372,6 +383,13 @@ if Config.DEBUG_COMMANDS then
 			register("AwayCommand", "/away", "/a", function(_source, message)
 				local words = string.split(message or "", " ")
 				simulateAway(tonumber(words[2]))
+			end)
+
+			-- "/skip 5" banks five finished shifts, which is five days of the
+			-- staleness history and five contributions to the daily tasks.
+			register("SkipCommand", "/skip", "/s", function(_source, message)
+				local words = string.split(message or "", " ")
+				skipShift(tonumber(words[2]))
 			end)
 
 			register("BoostCommand", "/boost", "/b", function(_source, message)

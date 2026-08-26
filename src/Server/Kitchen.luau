@@ -144,6 +144,49 @@ function Kitchen:closeResults()
 	end
 end
 
+-- Fills in the result of a shift nobody actually cooked, and stops. A testing
+-- convenience, gated behind Config.DEBUG_COMMANDS by its caller.
+--
+-- The numbers are a competent-but-not-perfect day, and they matter: ending a
+-- real shift early scores zero, and a zero shift poisons everything measured
+-- against recent earnings -- the understudy included, which then pays nothing
+-- and looks broken. This produces a shift worth having on the books.
+--
+-- Deliberately identical every time. Testing wants a repeatable number far
+-- more than it wants a realistic spread.
+function Kitchen:debugFinishShift()
+	if self.state ~= "Service" then
+		return
+	end
+
+	local served = 8
+	local perfect = 6
+
+	self.stats = {
+		served = served,
+		perfect = perfect,
+		good = served - perfect,
+		sloppy = 0,
+		failed = 0,
+		expired = 0,
+		chores = 2,
+	}
+	self.bestCombo = served
+	self.tips = served * (self.loadout.tipPerOrder or 0)
+
+	-- Roughly what eight orders at a decent grade and a climbing combo pay,
+	-- which lands near the 900 a real good early shift scores.
+	self.score = 900
+
+	self.orders = {}
+	self.activeOrderId = nil
+	self.build = {}
+	self.chore = nil
+	self.state = "Results"
+
+	self:emit({ type = "shiftEnded", score = self.score, stats = self.stats })
+end
+
 -- Brings the closing bell forward to right now. A testing convenience, gated
 -- behind Config.DEBUG_COMMANDS by its caller.
 --

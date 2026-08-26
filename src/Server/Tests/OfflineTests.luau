@@ -71,9 +71,27 @@ return function()
 	t:equal("and neither does one with no finished shifts",
 		OfflineDefs.accrue(
 			player({ stats = { shifts = 0, served = 0 } }), 4 * HOUR).amount, 0)
-	t:equal("a moment away is not worth a report",
-		OfflineDefs.accrue(player(), Config.OFFLINE_MIN_SECONDS - 1).amount, 0)
 	t:equal("no time away pays nothing", OfflineDefs.accrue(player(), 0).amount, 0)
+
+	-- The threshold is one run of the impression, and there must be no gap
+	-- between "too short to report" and "long enough to pay". A separate
+	-- minimum used to sit below it, so everything in between silently paid
+	-- nothing and read as a broken feature.
+	local oneRun = OfflineDefs.secondsPerShift()
+	t:equal("under one run pays nothing",
+		OfflineDefs.accrue(player(), oneRun - 1).amount, 0)
+	t:check("exactly one run pays something",
+		OfflineDefs.accrue(player(), oneRun).amount > 0)
+
+	-- Partial time above the threshold is credited rather than discarded.
+	local half = OfflineDefs.accrue(player(), oneRun * 1.5)
+	local full = OfflineDefs.accrue(player(), oneRun)
+	local double = OfflineDefs.accrue(player(), oneRun * 2)
+	t:check("an extra half run pays more than a whole one", half.amount > full.amount)
+	t:check("and less than two", half.amount < double.amount)
+	t:check("time scales the payout linearly",
+		math.abs(double.amount - full.amount * 2) <= 1,
+		string.format("%d vs %d", double.amount, full.amount * 2))
 
 	-- ------------------------------------------------------------ the story --
 

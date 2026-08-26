@@ -33,11 +33,65 @@ local actionBudget: { [Player]: { count: number, windowStart: number } } = {}
 -- When each idle player was last sent a snapshot to keep a boost clock moving.
 local lastIdlePush: { [Player]: number } = {}
 
+-- Each player's conditions for today, rolled once and held until the shift is
+-- played. Declared up here with the other registries because settleShift
+-- clears it and is defined long before conditionsFor fills it.
+local dayConditions: { [Player]: any } = {}
+
 -- Whether anything is currently counting down for this player.
 local function boostRunning(player: Player): boolean
 	local profile = DataService.get(player)
 	local earnings, tips = DailyDefs.boostValues(profile and profile.boosts)
 	return earnings > 0 or tips
+end
+
+-- Everything a finished shift does to a profile: pay it, count it, advance the
+-- day, feed the daily tasks.
+--
+-- Lifted out of the tick loop so the skip command can finish a shift down this
+-- exact path. A second copy of it would be a second thing to keep in step, and
+-- the one most likely to drift is the one only used in testing.
+local function settleShift(player: Player, kitchen)
+	-- Score is the skill number and stays big; cash is what that skill is
+	-- worth, and is deliberately a fraction.
+	--
+	-- Tips are added AFTER the multiplier rather than inside it. They are
+	-- already a flat per-order bonus, and running them through an earnings
+	-- boost as well would make two prizes that stack quietly worth far more
+	-- than either one reads.
+	local earned = math.floor(
+		kitchen.score
+			* kitchen.loadout.cashMultiplier
+			* Config.CASH_PER_POINT
+		+ 0.5) + (kitchen.tips or 0)
+	kitchen.lastEarned = earned
+
+	DataService.update(player, function(data)
+		data.cash += earned
+		data.stats.shifts += 1
+		data.stats.served += kitchen.stats.served
+		data.stats.bestScore = math.max(data.stats.bestScore, kitchen.score)
+		data.day += 1
+
+		-- Newest first, trimmed. This average is what the understudy is paid a
+		-- fraction of, so it has to be recorded here, on the way out of a real
+		-- shift.
+		table.insert(data.recentEarnings, 1, earned)
+		while #data.recentEarnings > Config.OFFLINE_RECENT_SHIFTS do
+			table.remove(data.recentEarnings)
+		end
+
+		-- Every ordinary shift counts towards the daily tasks. ensureToday
+		-- first, so a shift finished just after midnight lands on the new day's
+		-- list rather than topping up a list about to be thrown away.
+		DailyDefs.ensureToday(data.daily)
+		DailyDefs.applyShift(
+			data.daily, kitchen.stats, kitchen.score, kitchen.bestCombo)
+	end)
+
+	-- A finished day gets fresh weather tomorrow.
+	dayConditions[player] = nil
+	DataService.save(player)
 end
 
 -- What the understudy earned while the player was away, banked for collection.
@@ -185,13 +239,9 @@ end
 
 -- --------------------------------------------------------------- remotes ---
 
--- Turns a saved profile into the numbers a shift runs on. The only place that
--- knows how upgrades translate into gameplay.
--- Today's conditions, rolled once and held until the shift is played. Rolling
--- them fresh on every draft screen redraw would let a player reroll the
--- weather by closing and reopening it.
-local dayConditions: { [Player]: any } = {}
-
+-- Rolled once and held until the shift is played. Rolling fresh on every draft
+-- screen redraw would let a player reroll the weather by closing and reopening
+-- it until they liked what they saw.
 function conditionsFor(player: Player)
 	local existing = dayConditions[player]
 	if existing then
@@ -426,6 +476,61 @@ local function onStationAction(player: Player, payload: any)
 		pushSnapshot(player)
 		return
 
+	elseif action == "skipShift" then
+		-- Testing. Puts a finished shift on the books without cooking one, so
+		-- everything downstream of "has played" can be reached quickly: the
+		-- day counter, staleness, daily task progress, and the earnings
+		-- average the understudy is paid a fraction of.
+		--
+		-- Backspace was the alternative and it is the wrong tool: it ends a
+		-- shift where it stands, which for an untouched one means a score of
+		-- zero, and a run of zeroes drags that average to nothing.
+		if not Config.DEBUG_COMMANDS then
+			return
+		end
+
+		local count = if typeof(payload.count) == "number"
+			then math.clamp(math.floor(payload.count), 1, 20)
+			else 1
+
+		for _ = 1, count do
+			if kitchen.state == "Results" then
+				kitchen:closeResults()
+			end
+			if kitchen.state ~= "Idle" then
+				-- Mid-shift: settle what is really there rather than
+				-- overwriting it, so this never destroys a run in progress.
+				kitchen:endShiftNow()
+				kitchen:tick()
+				if kitchen.state == "Results" then
+					settleShift(player, kitchen)
+					kitchen:closeResults()
+				end
+			end
+
+			local loadout = loadoutFor(player, nil)
+			kitchen:startShift(loadout)
+
+			-- Same record onStartShift keeps, so skipped days age the menu
+			-- exactly as played ones do. Without this, skipping forward would
+			-- never make anything stale and staleness could not be tested by
+			-- the one command built for skipping forward.
+			DataService.update(player, function(data)
+				table.insert(data.recentMenus, 1, table.clone(loadout.menu))
+				while #data.recentMenus > Config.MENU_STALE_DAYS do
+					table.remove(data.recentMenus)
+				end
+			end)
+
+			kitchen:debugFinishShift()
+			settleShift(player, kitchen)
+			kitchen:closeResults()
+		end
+
+		kitchen:drainEvents()
+		pushSnapshot(player)
+		return
+
 	elseif action == "away" then
 		-- Testing. Rewinds the clock on this profile and settles the gap
 		-- exactly as a real return would, rather than fabricating a payout --
@@ -629,48 +734,7 @@ local function startTickLoop()
 				-- rather than inside Kitchen keeps the gameplay state machine
 				-- unaware of saving.
 				if before == "Service" and kitchen.state == "Results" then
-					-- Score is the skill number and stays big; cash is what
-					-- that skill is worth, and is deliberately a fraction.
-					--
-					-- Tips are added AFTER the multiplier rather than inside
-					-- it. They are already a flat per-order bonus, and running
-					-- them through an earnings boost as well would make two
-					-- prizes that stack quietly worth far more than either
-					-- reads.
-					local earned = math.floor(
-						kitchen.score
-							* kitchen.loadout.cashMultiplier
-							* Config.CASH_PER_POINT
-						+ 0.5) + (kitchen.tips or 0)
-					kitchen.lastEarned = earned
-
-					DataService.update(player, function(data)
-						data.cash += earned
-						data.stats.shifts += 1
-						data.stats.served += kitchen.stats.served
-						data.stats.bestScore = math.max(data.stats.bestScore, kitchen.score)
-						data.day += 1
-
-						-- Newest first, trimmed. This average is what the
-						-- understudy is paid a fraction of, so it has to be
-						-- recorded here, on the way out of a real shift.
-						table.insert(data.recentEarnings, 1, earned)
-						while #data.recentEarnings > Config.OFFLINE_RECENT_SHIFTS do
-							table.remove(data.recentEarnings)
-						end
-
-						-- Every ordinary shift counts towards the daily tasks.
-						-- ensureToday first, so a shift finished just after
-						-- midnight lands on the new day's list rather than
-						-- topping up a list that is about to be thrown away.
-						DailyDefs.ensureToday(data.daily)
-						DailyDefs.applyShift(
-							data.daily, kitchen.stats, kitchen.score, kitchen.bestCombo)
-					end)
-
-					-- A finished day gets fresh weather tomorrow.
-					dayConditions[player] = nil
-					DataService.save(player)
+					settleShift(player, kitchen)
 				end
 				-- Idle kitchens have nothing moving; skip the traffic unless
 				-- the state just changed.

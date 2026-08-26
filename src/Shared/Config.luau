@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "awaycmd-48"
+Config.BUILD = "skipcmd-49"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -187,10 +187,6 @@ Config.OFFLINE_WALKOUT_RATE = 0.31
 -- How many recent shifts the offline rate averages over. Enough to smooth out
 -- one bad run, few enough that improving is felt quickly.
 Config.OFFLINE_RECENT_SHIFTS = 5
-
--- Below this there is nothing worth reporting, and a collect screen for eleven
--- credits is worse than no collect screen.
-Config.OFFLINE_MIN_SECONDS = 120
 
 -- ---------------------------------------------------------------- debug ----
 -- Testing conveniences. TURN THIS OFF BEFORE RELEASE -- it lets a client end

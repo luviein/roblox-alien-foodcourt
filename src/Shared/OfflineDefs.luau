@@ -56,6 +56,18 @@ function OfflineDefs.capHours(profile): number
 	return Config.OFFLINE_CAP_HOURS + ShopDefs.valueOf("cell", upgrades.cell or 0)
 end
 
+-- How long one run of the impression takes, and so the shortest absence worth
+-- reporting: below this it never finished a shift, and there is nothing to
+-- tell you about.
+--
+-- DERIVED rather than configured. It was a separate number once and the two
+-- disagreed: the config claimed a two minute floor while the arithmetic threw
+-- away anything under thirty, so everything in between silently paid nothing
+-- and looked like a broken feature.
+function OfflineDefs.secondsPerShift(): number
+	return 3600 / math.max(Config.OFFLINE_SHIFTS_PER_HOUR, 0.0001)
+end
+
 -- ---------------------------------------------------------------- accrual --
 
 -- What the understudy earned over `seconds` away, plus the numbers the collect
@@ -88,21 +100,27 @@ function OfflineDefs.accrue(profile, seconds: number)
 		return report
 	end
 
-	if counted < Config.OFFLINE_MIN_SECONDS then
+	-- Away for less than one run of the impression: it never finished a shift,
+	-- so there is nothing to report and no reason to interrupt anyone with a
+	-- full screen panel over a handful of credits.
+	if counted < OfflineDefs.secondsPerShift() then
 		return report
 	end
 
-	local hours = counted / 3600
-	report.ran = math.floor(hours * Config.OFFLINE_SHIFTS_PER_HOUR)
+	-- FRACTIONAL on purpose. Flooring this first threw away up to one whole
+	-- shift of time every return, so being away an hour and a half paid the
+	-- same as an hour. `ran` is rounded for the report; the money is not.
+	local shifts = (counted / 3600) * Config.OFFLINE_SHIFTS_PER_HOUR
+	report.ran = math.max(1, math.floor(shifts + 0.5))
 
 	-- The impression is worth a fraction of the real thing, and the walkouts
 	-- ARE that fraction: what it loses at the counter is what it loses on the
 	-- till. One number, so the story cannot drift from the payout.
 	local keeps = 1 - Config.OFFLINE_WALKOUT_RATE
-	report.amount = math.floor(report.ran * perShift * keeps + 0.5)
+	report.amount = math.floor(shifts * perShift * keeps + 0.5)
 
 	local perShiftServed = (stats.served or 0) / math.max(stats.shifts or 1, 1)
-	local attempted = report.ran * perShiftServed
+	local attempted = shifts * perShiftServed
 	report.left = math.floor(attempted * Config.OFFLINE_WALKOUT_RATE + 0.5)
 	report.served = math.max(0, math.floor(attempted + 0.5) - report.left)
 
