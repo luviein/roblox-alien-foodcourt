@@ -11,6 +11,7 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ChoreDefs = require(Shared.ChoreDefs)
+local Config = require(Shared.Config)
 local DailyDefs = require(Shared.DailyDefs)
 local DishDefs = require(Shared.DishDefs)
 
@@ -160,7 +161,9 @@ local function buildHypeMeter(parent: Instance)
 		BorderSizePixel = 0,
 		Position = UDim2.fromScale(0.5, 0.098),
 		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromScale(0.24, 0.05),
+		-- Wide enough for "HYPE 26% . MENU +5%", which is two readings rather
+		-- than one and needs the room.
+		Size = UDim2.fromScale(0.34, 0.05),
 		Visible = false,
 	}, parent)
 	corner(frame, 8)
@@ -181,8 +184,8 @@ local function buildHypeMeter(parent: Instance)
 	local value = make("TextLabel", {
 		Name = "Value",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.45, 0.06),
-		Size = UDim2.fromScale(0.5, 0.5),
+		Position = UDim2.fromScale(0.32, 0.06),
+		Size = UDim2.fromScale(0.63, 0.5),
 		Font = Enum.Font.GothamBold,
 		Text = "HYPE 25%",
 		TextColor3 = COLOR.text,
@@ -1311,8 +1314,25 @@ local function renderHype(meter, snapshot)
 	local phase = snapshot.phase or ""
 
 	meter.phase.Text = string.upper(phase)
-	meter.value.Text = string.format("HYPE %d%%", math.floor(hype * 100 + 0.5))
 	meter.fill.Size = UDim2.fromScale(math.clamp(hype, 0, 1), 1)
+
+	-- Two different percentages live on this screen and they are not the same
+	-- unit, which is exactly the trap: the meter is a fraction of a FULL HOUSE,
+	-- while a dish tag is worth a fraction OF YOUR OWN BASE. A +5% dish on a
+	-- base of 25% moves the meter by about one point, and that reads as the
+	-- tag being broken rather than as five percent of a quarter.
+	--
+	-- So the meter now says both: where the counter actually sits, and what
+	-- the menu is worth against this player's own baseline.
+	local base = Config.BASE_HYPE
+		+ Config.REBIRTH_HYPE_STEP
+			* ((snapshot.profile and snapshot.profile.rebirths) or 0)
+	local menuDelta = if base > 0 then hype / base - 1 else 0
+	local percent = math.round(hype * 100)
+
+	meter.value.Text = if math.abs(menuDelta) >= 0.005
+		then string.format("HYPE %d%%  .  MENU %+d%%", percent, math.round(menuDelta * 100))
+		else string.format("HYPE %d%%", percent)
 
 	-- Hype only moves at a phase boundary, so this fires twice a shift at most.
 	if meter.lastPhase and meter.lastPhase ~= phase and meter.lastHype then

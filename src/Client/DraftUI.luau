@@ -592,9 +592,21 @@ function DraftUI.render(refs, profile)
 			HypeDefs.evaluate(defs, phase, conditions.weather or "clear", stale, base)
 		local row = refs.phaseRows[phase]
 
-		row.readout.Text = string.format("%d%%", math.round(hype * 100))
-		row.readout.TextColor3 = if hype > base + 0.01 then COLOR.good
-			elseif hype < base - 0.01 then COLOR.bad
+		-- Both numbers, because they are different units and the WHY column
+		-- below speaks in the second one. The big figure is the counter as a
+		-- fraction of a full house; the bracket is what this menu is worth
+		-- against your own baseline, which is what "+5% suits the weather"
+		-- actually means. Five percent of a quarter moves the big figure by
+		-- one point, and without the bracket that looks like a broken tag.
+		local delta = if base > 0 then hype / base - 1 else 0
+		row.readout.Text = if math.abs(delta) >= 0.005
+			then string.format("%d%%  (%+d%%)", math.round(hype * 100), math.round(delta * 100))
+			else string.format("%d%%", math.round(hype * 100))
+
+		-- Compared relatively too. An absolute threshold quietly stops meaning
+		-- anything as base hype moves with rebirths.
+		row.readout.TextColor3 = if delta > 0.005 then COLOR.good
+			elseif delta < -0.005 then COLOR.bad
 			else COLOR.text
 		row.tick.Position = UDim2.fromScale((base - lo) / (hi - lo), 0)
 		row.fill.Size = UDim2.fromScale((hype - lo) / (hi - lo), 1)

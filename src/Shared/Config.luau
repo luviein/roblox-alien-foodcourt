@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "staleprofile-43"
+Config.BUILD = "hypeunits-44"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
