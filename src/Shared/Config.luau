@@ -7,7 +7,7 @@ local Config = {}
 -- Bumped by hand whenever something changes that you need to SEE change.
 -- Shown in the corner of the loading screen, so one glance confirms Studio is
 -- actually running the current files rather than a stale synced copy.
-Config.BUILD = "simplify-58"
+Config.BUILD = "swipechore-59"
 
 -- ---------------------------------------------------------------- shift ----
 -- One shift is one day: morning, afternoon and night, thirty seconds each.
@@ -61,6 +61,20 @@ Config.CHORE_GAP = { 9, 17 }
 -- five second window would make chores the whole game, and a flat -1 would
 -- make them free once a streak is long.
 Config.CHORE_COMBO_PENALTY = 0.5
+
+-- How far a FLING has to travel to count, as a fraction of the drag board's
+-- width. Far enough that a nervous twitch is not a throw, short enough that a
+-- committed one lands first time.
+Config.CHORE_FLING_FRACTION = 0.40
+
+-- A SCRUB is back and forth. This many reversals finish it, and each one only
+-- counts if the run into it covered this fraction of the board -- otherwise
+-- a fast wiggle in one spot would clear the chore without cleaning anything.
+--
+-- Scrubbing is slower than throwing on purpose. It is the more annoying chore
+-- and it should feel like it, which is also why those two have longer timers.
+Config.CHORE_SCRUB_STROKES = 6
+Config.CHORE_SCRUB_TRAVEL = 0.18
 
 Config.GRADE_PATIENCE = {
 	perfect = 0.55,

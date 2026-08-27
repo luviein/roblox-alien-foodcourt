@@ -6,13 +6,29 @@
 -- that is the whole point of them -- without something like this the game is
 -- busy but never actually pressured.
 --
--- One key clears whichever chore is up, rather than a key per chore. Every
--- letter key is potentially an ingredient for whatever dish is in your hands,
--- so per-chore keys would collide with prep at exactly the worst moment.
+-- Each one is cleared by a GESTURE rather than a key. Every letter key is
+-- potentially an ingredient for whatever dish is in your hands, so a chore key
+-- collides with prep at exactly the worst moment -- and a chore that costs one
+-- keypress is an interruption you barely notice rather than one you have to
+-- stop and deal with.
+--
+-- Two gestures, because two chores that feel the same are one chore:
+--
+--   fling  one decisive drag in any direction, past a threshold. Throwing
+--          something. Quick, but it wants commitment -- a timid drag does
+--          nothing.
+--   scrub  drag back and forth. Each reversal counts a stroke, and it takes
+--          several. Slower and more annoying on purpose: it is cleaning.
+--
+-- Both are one pointer moving, so mouse and touch are the same code path and
+-- neither needed a separate control scheme.
 
 local ChoreDefs = {}
 
-ChoreDefs.KEY = "C"
+ChoreDefs.Gesture = {
+	FLING = "fling",
+	SCRUB = "scrub",
+}
 
 ChoreDefs.List = {
 	trash = {
@@ -20,6 +36,8 @@ ChoreDefs.List = {
 		name = "Airlock the Trash",
 		blurb = "It is starting to hum.",
 		duration = 5,
+		gesture = ChoreDefs.Gesture.FLING,
+		verb = "Fling it at the airlock",
 		-- Base likelihood before menu tags push it around. Dishes carrying the
 		-- `trash` tag raise this one; `dishes` raises the wash.
 		weight = 1.0,
@@ -30,7 +48,9 @@ ChoreDefs.List = {
 		id = "dishes",
 		name = "Run the Sonic Wash",
 		blurb = "The pile is listing.",
-		duration = 5,
+		duration = 7,
+		gesture = ChoreDefs.Gesture.SCRUB,
+		verb = "Scrub back and forth",
 		weight = 1.0,
 		tag = "dishes",
 	},
@@ -39,7 +59,9 @@ ChoreDefs.List = {
 		id = "toilet",
 		name = "Clean the Toilet",
 		blurb = "Do not ask what happened.",
-		duration = 6,
+		duration = 8,
+		gesture = ChoreDefs.Gesture.SCRUB,
+		verb = "Scrub. Keep scrubbing.",
 		-- Nothing on the menu makes this more or less likely. It is simply the
 		-- universe deciding it is your problem.
 		weight = 0.45,

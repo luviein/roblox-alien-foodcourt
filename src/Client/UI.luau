@@ -8,6 +8,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ChoreDefs = require(Shared.ChoreDefs)
@@ -1178,8 +1179,22 @@ end
 -- The interrupt. Deliberately loud and deliberately in the middle of the
 -- screen: a chore you can politely ignore is not an interruption, it is
 -- decoration.
-local function buildChoreBanner(parent: Instance, onClear: () -> ())
-	local banner = make("TextButton", {
+-- The chore panel: an interruption you have to physically deal with.
+--
+-- A chore used to be one keypress, which made it an announcement rather than an
+-- interruption -- you acknowledged it and carried on. Each one is a gesture
+-- against the clock now, so it genuinely takes your hands off the food.
+--
+-- FLING is one committed drag in any direction. SCRUB is back and forth, and
+-- counts a stroke on each reversal that travelled far enough to have meant it.
+-- Both are a single pointer moving, so mouse and touch run the same code with
+-- no separate control scheme.
+--
+-- The drag is tracked on UserInputService rather than on the board, because
+-- board-local InputChanged stops firing the moment the pointer leaves it -- and
+-- a fling that has to stay inside its own box is not a fling.
+local function buildChorePanel(parent: Instance, onClear: () -> ())
+	local panel = make("TextButton", {
 		Name = "Chore",
 		BackgroundColor3 = COLOR.bad,
 		BorderSizePixel = 0,
@@ -1187,39 +1202,104 @@ local function buildChoreBanner(parent: Instance, onClear: () -> ())
 		Text = "",
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.fromScale(0.5, 0.115),
-		Size = UDim2.fromScale(0.34, 0.1),
+		Size = UDim2.fromScale(0.34, 0.26),
 		Visible = false,
 		ZIndex = 8,
 	}, parent)
-	corner(banner, 10)
+	corner(panel, 10)
 
 	local title = make("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.04, 0.08),
-		Size = UDim2.fromScale(0.92, 0.44),
+		Position = UDim2.fromScale(0.05, 0.04),
+		Size = UDim2.fromScale(0.9, 0.15),
 		Font = Enum.Font.GothamBold,
 		Text = "",
 		TextColor3 = COLOR.bg,
 		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 9,
-	}, banner)
+	}, panel)
 	make("UITextSizeConstraint", { MaxTextSize = 20 }, title)
 
 	local prompt = make("TextLabel", {
 		Name = "Prompt",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromScale(0.04, 0.5),
-		Size = UDim2.fromScale(0.92, 0.28),
+		Position = UDim2.fromScale(0.05, 0.19),
+		Size = UDim2.fromScale(0.9, 0.1),
 		Font = Enum.Font.GothamBold,
 		Text = "",
 		TextColor3 = COLOR.bg,
 		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 9,
-	}, banner)
+	}, panel)
 	make("UITextSizeConstraint", { MaxTextSize = 14 }, prompt)
+
+	-- The drag surface. A TextButton so it swallows the press rather than
+	-- letting it fall through to whatever is behind the panel.
+	local board = make("TextButton", {
+		Name = "Board",
+		BackgroundColor3 = COLOR.bg,
+		BackgroundTransparency = 0.55,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0.31),
+		Size = UDim2.fromScale(0.9, 0.42),
+		ZIndex = 9,
+	}, panel)
+	corner(board, 8)
+
+	-- What you are dragging. Purely visual: the board takes the input and this
+	-- follows, because a gesture with nothing moving under it feels like a
+	-- gesture that is not being read.
+	local puck = make("Frame", {
+		Name = "Puck",
+		BackgroundColor3 = COLOR.text,
+		BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.22, 0.5),
+		ZIndex = 10,
+	}, board)
+	corner(puck, 6)
+
+	local puckFace = make("TextLabel", {
+		Name = "Face",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLOR.bg,
+		TextScaled = true,
+		ZIndex = 11,
+	}, puck)
+	make("UITextSizeConstraint", { MaxTextSize = 13 }, puckFace)
+
+	-- How far through the gesture you are. Separate from the countdown below,
+	-- which is how long is left to finish it.
+	local strokeTrack = make("Frame", {
+		Name = "StrokeTrack",
+		BackgroundColor3 = COLOR.bg,
+		BackgroundTransparency = 0.4,
+		BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0.76),
+		Size = UDim2.fromScale(0.9, 0.06),
+		ZIndex = 9,
+	}, panel)
+	corner(strokeTrack, 3)
+
+	local strokeFill = make("Frame", {
+		Name = "Fill",
+		BackgroundColor3 = COLOR.good,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(0, 1),
+		ZIndex = 10,
+	}, strokeTrack)
+	corner(strokeFill, 3)
 
 	local track = make("Frame", {
 		Name = "Track",
@@ -1227,10 +1307,10 @@ local function buildChoreBanner(parent: Instance, onClear: () -> ())
 		BackgroundTransparency = 0.5,
 		BorderSizePixel = 0,
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.fromScale(0.5, 0.94),
-		Size = UDim2.fromScale(0.92, 0.1),
+		Position = UDim2.fromScale(0.5, 0.96),
+		Size = UDim2.fromScale(0.9, 0.07),
 		ZIndex = 9,
-	}, banner)
+	}, panel)
 	corner(track, 3)
 
 	local fill = make("Frame", {
@@ -1242,9 +1322,148 @@ local function buildChoreBanner(parent: Instance, onClear: () -> ())
 	}, track)
 	corner(fill, 3)
 
-	banner.Activated:Connect(onClear)
+	-- ---------------------------------------------------------- the gesture --
 
-	return { frame = banner, title = title, prompt = prompt, fill = fill }
+	local drag = {
+		gesture = ChoreDefs.Gesture.FLING,
+		active = false,
+		done = false,
+		origin = Vector2.zero,
+		last = Vector2.zero,
+		heading = 0,
+		travel = 0,
+		strokes = 0,
+	}
+
+	local function centrePuck()
+		puck.Position = UDim2.fromScale(0.5, 0.5)
+	end
+
+	local function prepare(def)
+		drag.gesture = (def and def.gesture) or ChoreDefs.Gesture.FLING
+		drag.active = false
+		drag.done = false
+		drag.heading = 0
+		drag.travel = 0
+		drag.strokes = 0
+		puckFace.Text = if drag.gesture == ChoreDefs.Gesture.FLING then "THROW" else "SCRUB"
+		strokeFill.Size = UDim2.fromScale(0, 1)
+		centrePuck()
+	end
+
+	local function finish()
+		if drag.done then
+			return
+		end
+		drag.done = true
+		drag.active = false
+		strokeFill.Size = UDim2.fromScale(1, 1)
+		centrePuck()
+		onClear()
+	end
+
+	board.InputBegan:Connect(function(input)
+		if drag.done then
+			return
+		end
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch
+		then
+			return
+		end
+
+		drag.active = true
+		drag.origin = Vector2.new(input.Position.X, input.Position.Y)
+		drag.last = drag.origin
+		drag.heading = 0
+		drag.travel = 0
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not drag.active or drag.done then
+			return
+		end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement
+			and input.UserInputType ~= Enum.UserInputType.Touch
+		then
+			return
+		end
+
+		local at = Vector2.new(input.Position.X, input.Position.Y)
+		local size = board.AbsoluteSize
+		local width = math.max(size.X, 1)
+		local delta = at - drag.origin
+
+		puck.Position = UDim2.fromScale(
+			math.clamp(0.5 + delta.X / width, 0.12, 0.88),
+			math.clamp(0.5 + delta.Y / math.max(size.Y, 1), 0.25, 0.75))
+
+		if drag.gesture == ChoreDefs.Gesture.FLING then
+			if delta.Magnitude >= width * Config.CHORE_FLING_FRACTION then
+				finish()
+			end
+			drag.last = at
+			return
+		end
+
+		local moved = at.X - drag.last.X
+
+		-- A deadzone, or pointer jitter flips the heading constantly and resets
+		-- the travel before it can ever add up to a stroke.
+		if math.abs(moved) >= 2 then
+			local heading = if moved > 0 then 1 else -1
+
+			if drag.heading == 0 then
+				drag.heading = heading
+			elseif heading ~= drag.heading then
+				-- Turned around. It only counts if the run into the turn was
+				-- long enough to have been a real stroke.
+				if drag.travel >= width * Config.CHORE_SCRUB_TRAVEL then
+					drag.strokes += 1
+					strokeFill.Size = UDim2.fromScale(
+						math.clamp(drag.strokes / Config.CHORE_SCRUB_STROKES, 0, 1), 1)
+					if drag.strokes >= Config.CHORE_SCRUB_STROKES then
+						finish()
+						return
+					end
+				end
+				drag.heading = heading
+				drag.travel = 0
+			end
+
+			drag.travel += math.abs(moved)
+			drag.last = at
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch
+		then
+			return
+		end
+
+		-- Letting go abandons a half-finished fling but KEEPS scrub strokes.
+		-- Scrubbing is a repeated motion and lifting between strokes is normal;
+		-- a throw is one movement, and a released one simply did not happen.
+		drag.active = false
+		if drag.gesture == ChoreDefs.Gesture.FLING then
+			drag.heading = 0
+			drag.travel = 0
+		end
+		centrePuck()
+	end)
+
+	return {
+		frame = panel,
+		title = title,
+		prompt = prompt,
+		fill = fill,
+		prepare = prepare,
+		-- Which chore the panel is currently set up for, so render only resets
+		-- the gesture when a NEW one arrives rather than every snapshot.
+		lastId = nil :: string?,
+	}
 end
 
 local function buildFlash(parent: Instance)
@@ -1383,7 +1602,7 @@ function UI.build(playerGui: Instance, callbacks): any
 		keyGrid = buildKeyGrid(prep, callbacks.onKey),
 		actionBar = buildActionBar(prep, callbacks.onServe, callbacks.onScrap),
 		overlay = overlay,
-		chore = buildChoreBanner(root, callbacks.onChore),
+		chore = buildChorePanel(root, callbacks.onChore),
 		flash = buildFlash(root),
 	}
 end
@@ -1397,6 +1616,7 @@ local IDLE_BODY = table.concat({
 	"SPACE . serve                  X . scrap the plate",
 	"",
 	"Build each order top to bottom, in the order listed on their ticket.",
+	"Chores interrupt: drag to throw, or scrub back and forth to clean.",
 }, "\n")
 
 -- Today's challenge, drawn from DailyDefs rather than from a remote: the
@@ -1659,10 +1879,25 @@ function UI.render(refs, snapshot)
 	-- with its own clock that you did not start.
 	local chore = snapshot.chore
 	refs.chore.frame.Visible = chore ~= nil and state == "Service"
+
 	if chore then
 		local def = ChoreDefs.get(chore.id)
+
+		-- Reset the gesture only when a NEW chore arrives. Doing it every
+		-- snapshot would wipe the strokes already scrubbed, ten times a second,
+		-- and the bar would never move.
+		if refs.chore.lastId ~= chore.id then
+			refs.chore.lastId = chore.id
+			refs.chore.prepare(def)
+		end
+
 		refs.chore.title.Text = string.upper(def and def.name or chore.id)
-		refs.chore.prompt.Text = ("press %s   %s"):format(ChoreDefs.KEY, def and def.blurb or "")
+		refs.chore.prompt.Text = ("%s   %s")
+			:format(def and def.verb or "Deal with it", def and def.blurb or "")
+	else
+		-- Cleared or expired. Forgetting the id here is what lets the same
+		-- chore rolling again later still reset the gesture.
+		refs.chore.lastId = nil
 	end
 
 	-- The prep panel is only up while you actually have an order in hand. A

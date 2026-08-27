@@ -333,10 +333,6 @@ local function handleInput(_actionName: string, inputState: Enum.UserInputState,
 		-- and it is nowhere near the cooking keys, so it cannot be hit by
 		-- accident mid-order. Gated server-side on Config.DEBUG_COMMANDS.
 		endShiftNow()
-	elseif keyCode == Enum.KeyCode.C then
-		-- Clears whatever chore is up. Its own key so it never collides with an
-		-- ingredient on whatever dish happens to be in hand.
-		sendAction({ action = "chore" })
 	elseif keyCode == Enum.KeyCode.Space then
 		onServe()
 	elseif keyCode == Enum.KeyCode.X then
@@ -354,7 +350,7 @@ local BOUND_KEYS = {
 	Enum.KeyCode.Q, Enum.KeyCode.W, Enum.KeyCode.E, Enum.KeyCode.R, Enum.KeyCode.T,
 	Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.F, Enum.KeyCode.G,
 	Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,
-	Enum.KeyCode.Space, Enum.KeyCode.X, Enum.KeyCode.C,
+	Enum.KeyCode.Space, Enum.KeyCode.X,
 	Enum.KeyCode.Backspace,
 	Enum.KeyCode.F5, Enum.KeyCode.F6, Enum.KeyCode.F7, Enum.KeyCode.F8,
 }
