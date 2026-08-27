@@ -14,14 +14,21 @@
 --
 -- Two gestures, because two chores that feel the same are one chore:
 --
---   fling  one decisive drag in any direction, past a threshold. Throwing
---          something. Quick, but it wants commitment -- a timid drag does
---          nothing.
---   scrub  drag back and forth. Each reversal counts a stroke, and it takes
---          several. Slower and more annoying on purpose: it is cleaning.
+--   fling  a decisive drag in any direction, past a threshold. Throwing
+--          something out. `work` counts HOW MANY -- five bags is five throws.
+--   scrub  keep the pointer moving. `work` is SECONDS of actual scrubbing,
+--          not elapsed time, so resting the hand pauses it.
+--
+-- Counting throws and timing scrubs rather than forcing both into one unit is
+-- deliberate: a bag is a discrete thing you get rid of, and cleaning is not.
 --
 -- Both are one pointer moving, so mouse and touch are the same code path and
 -- neither needed a separate control scheme.
+--
+-- `work` is the LABOUR, and it is the number power-ups will reduce -- fewer
+-- bags, less scrubbing. Which is why the server computes the real requirement
+-- per chore and sends it with the chore, rather than the client reading the
+-- base value out of this table and deciding for itself.
 
 local ChoreDefs = {}
 
@@ -35,9 +42,11 @@ ChoreDefs.List = {
 		id = "trash",
 		name = "Airlock the Trash",
 		blurb = "It is starting to hum.",
-		duration = 5,
+		duration = 9,
 		gesture = ChoreDefs.Gesture.FLING,
-		verb = "Fling it at the airlock",
+		-- Five bags out of the airlock, one throw each.
+		work = 5,
+		verb = "Throw every bag out",
 		-- Base likelihood before menu tags push it around. Dishes carrying the
 		-- `trash` tag raise this one; `dishes` raises the wash.
 		weight = 1.0,
@@ -50,7 +59,9 @@ ChoreDefs.List = {
 		blurb = "The pile is listing.",
 		duration = 7,
 		gesture = ChoreDefs.Gesture.SCRUB,
-		verb = "Scrub back and forth",
+		-- Three seconds of actual scrubbing. Bad, but not the worst job here.
+		work = 3,
+		verb = "Scrub until it stops",
 		weight = 1.0,
 		tag = "dishes",
 	},
@@ -59,8 +70,10 @@ ChoreDefs.List = {
 		id = "toilet",
 		name = "Clean the Toilet",
 		blurb = "Do not ask what happened.",
-		duration = 8,
+		duration = 9,
 		gesture = ChoreDefs.Gesture.SCRUB,
+		-- Four seconds. The worst job on the station, priced accordingly.
+		work = 4,
 		verb = "Scrub. Keep scrubbing.",
 		-- Nothing on the menu makes this more or less likely. It is simply the
 		-- universe deciding it is your problem.
@@ -73,6 +86,32 @@ ChoreDefs.Order = { "trash", "dishes", "toilet" }
 
 function ChoreDefs.get(choreId: string)
 	return ChoreDefs.List[choreId]
+end
+
+-- How much labour this chore actually costs, after whatever reduces it.
+--
+-- `reduction` is a fraction: 0.25 takes a quarter off. This is the seam the
+-- planned power-ups plug into -- fewer bags to throw, less scrubbing -- and it
+-- exists now, returning the base, so those never have to reach into the chore
+-- system and change how work is counted.
+--
+-- Never returns less than one. A chore reduced to nothing is not a reward, it
+-- is a chore that flickers on screen and vanishes, and the player is left
+-- wondering what they missed.
+--
+-- Flings round to whole bags because half a bag is not a thing you can throw.
+-- Scrub seconds do not, because two and a half seconds of scrubbing is.
+function ChoreDefs.workFor(def, reduction: number?): number
+	if not def then
+		return 1
+	end
+
+	local remaining = (def.work or 1) * (1 - math.clamp(reduction or 0, 0, 0.9))
+
+	if def.gesture == ChoreDefs.Gesture.FLING then
+		return math.max(1, math.floor(remaining + 0.5))
+	end
+	return math.max(1, remaining)
 end
 
 -- Picks a chore, weighted, with menu tags nudging the odds. `tagCounts` is how

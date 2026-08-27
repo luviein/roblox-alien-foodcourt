@@ -429,6 +429,11 @@ local function loadoutFor(player: Player, chosen: { string }?)
 		-- a tip boost is running.
 		tipPerOrder = if tipBoost then Config.TIP_BOOST_PER_ORDER else 0,
 
+		-- Fraction taken off every chore's workload. Nothing reduces it yet --
+		-- the planned power-ups are what will -- but the seam is here so they
+		-- do not have to reach into the chore system to add one.
+		choreReduction = 0,
+
 		hypeByPhase = hypeByPhase,
 		weather = conditions.weather,
 

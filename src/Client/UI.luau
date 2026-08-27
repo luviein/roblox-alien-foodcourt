@@ -1324,30 +1324,47 @@ local function buildChorePanel(parent: Instance, onClear: () -> ())
 
 	-- ---------------------------------------------------------- the gesture --
 
+	-- `need` is the server's requirement: bags for a fling, seconds of scrubbing
+	-- for a scrub. `did` is progress in the same unit.
 	local drag = {
 		gesture = ChoreDefs.Gesture.FLING,
+		need = 1,
+		did = 0,
 		active = false,
 		done = false,
+		spent = false,
 		origin = Vector2.zero,
 		last = Vector2.zero,
-		heading = 0,
-		travel = 0,
-		strokes = 0,
+		lastAt = 0,
 	}
 
 	local function centrePuck()
 		puck.Position = UDim2.fromScale(0.5, 0.5)
 	end
 
-	local function prepare(def)
+	local function showProgress()
+		strokeFill.Size = UDim2.fromScale(math.clamp(drag.did / drag.need, 0, 1), 1)
+
+		if drag.gesture == ChoreDefs.Gesture.FLING then
+			-- Bags remaining, because that is the thing being counted down and
+			-- a player throwing rubbish out counts what is left, not what has
+			-- gone.
+			local left = math.max(0, math.ceil(drag.need - drag.did))
+			puckFace.Text = if left > 0 then ("BAG  %d"):format(left) else "DONE"
+		else
+			puckFace.Text = "SCRUB"
+		end
+	end
+
+	local function prepare(def, work: number?)
 		drag.gesture = (def and def.gesture) or ChoreDefs.Gesture.FLING
+		drag.need = math.max(work or ChoreDefs.workFor(def), 0.01)
+		drag.did = 0
 		drag.active = false
 		drag.done = false
-		drag.heading = 0
-		drag.travel = 0
-		drag.strokes = 0
-		puckFace.Text = if drag.gesture == ChoreDefs.Gesture.FLING then "THROW" else "SCRUB"
-		strokeFill.Size = UDim2.fromScale(0, 1)
+		drag.spent = false
+		drag.lastAt = 0
+		showProgress()
 		centrePuck()
 	end
 
@@ -1357,7 +1374,8 @@ local function buildChorePanel(parent: Instance, onClear: () -> ())
 		end
 		drag.done = true
 		drag.active = false
-		strokeFill.Size = UDim2.fromScale(1, 1)
+		drag.did = drag.need
+		showProgress()
 		centrePuck()
 		onClear()
 	end
@@ -1375,8 +1393,11 @@ local function buildChorePanel(parent: Instance, onClear: () -> ())
 		drag.active = true
 		drag.origin = Vector2.new(input.Position.X, input.Position.Y)
 		drag.last = drag.origin
-		drag.heading = 0
-		drag.travel = 0
+		drag.lastAt = os.clock()
+
+		-- Each press is one throw. The bag only leaves once, however far the
+		-- drag carries on afterwards.
+		drag.spent = false
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
@@ -1398,42 +1419,44 @@ local function buildChorePanel(parent: Instance, onClear: () -> ())
 			math.clamp(0.5 + delta.X / width, 0.12, 0.88),
 			math.clamp(0.5 + delta.Y / math.max(size.Y, 1), 0.25, 0.75))
 
+		local now = os.clock()
+
 		if drag.gesture == ChoreDefs.Gesture.FLING then
-			if delta.Magnitude >= width * Config.CHORE_FLING_FRACTION then
-				finish()
+			-- One bag per press. `spent` is what stops a single long drag
+			-- emptying the whole airlock: to throw five bags you press, throw,
+			-- release, and do it again five times.
+			if not drag.spent and delta.Magnitude >= width * Config.CHORE_FLING_FRACTION then
+				drag.spent = true
+				drag.did += 1
+				showProgress()
+				centrePuck()
+				if drag.did >= drag.need then
+					finish()
+				end
 			end
 			drag.last = at
+			drag.lastAt = now
 			return
 		end
 
-		local moved = at.X - drag.last.X
-
-		-- A deadzone, or pointer jitter flips the heading constantly and resets
-		-- the travel before it can ever add up to a stroke.
-		if math.abs(moved) >= 2 then
-			local heading = if moved > 0 then 1 else -1
-
-			if drag.heading == 0 then
-				drag.heading = heading
-			elseif heading ~= drag.heading then
-				-- Turned around. It only counts if the run into the turn was
-				-- long enough to have been a real stroke.
-				if drag.travel >= width * Config.CHORE_SCRUB_TRAVEL then
-					drag.strokes += 1
-					strokeFill.Size = UDim2.fromScale(
-						math.clamp(drag.strokes / Config.CHORE_SCRUB_STROKES, 0, 1), 1)
-					if drag.strokes >= Config.CHORE_SCRUB_STROKES then
-						finish()
-						return
-					end
-				end
-				drag.heading = heading
-				drag.travel = 0
+		-- Scrub counts SECONDS OF MOTION, not seconds held. A hand resting on
+		-- the button cleans nothing, so time only accrues while the pointer is
+		-- actually moving.
+		local moved = (at - drag.last).Magnitude
+		if moved >= 2 then
+			-- Clamped, because InputChanged does not fire while the pointer is
+			-- still: without this, pausing for two seconds and twitching would
+			-- bank the whole pause as scrubbing.
+			drag.did += math.min(now - drag.lastAt, 0.1)
+			showProgress()
+			if drag.did >= drag.need then
+				finish()
+				return
 			end
-
-			drag.travel += math.abs(moved)
-			drag.last = at
 		end
+
+		drag.last = at
+		drag.lastAt = now
 	end)
 
 	UserInputService.InputEnded:Connect(function(input)
@@ -1443,14 +1466,12 @@ local function buildChorePanel(parent: Instance, onClear: () -> ())
 			return
 		end
 
-		-- Letting go abandons a half-finished fling but KEEPS scrub strokes.
-		-- Scrubbing is a repeated motion and lifting between strokes is normal;
-		-- a throw is one movement, and a released one simply did not happen.
+		-- Letting go never costs progress. Bags already thrown stay thrown and
+		-- seconds already scrubbed stay scrubbed -- both are repeated actions,
+		-- and lifting the hand between them is how they are done. Only the
+		-- throw in flight is abandoned, which is what `spent` covers.
 		drag.active = false
-		if drag.gesture == ChoreDefs.Gesture.FLING then
-			drag.heading = 0
-			drag.travel = 0
-		end
+		drag.spent = false
 		centrePuck()
 	end)
 
@@ -1888,7 +1909,7 @@ function UI.render(refs, snapshot)
 		-- and the bar would never move.
 		if refs.chore.lastId ~= chore.id then
 			refs.chore.lastId = chore.id
-			refs.chore.prepare(def)
+			refs.chore.prepare(def, chore.work)
 		end
 
 		refs.chore.title.Text = string.upper(def and def.name or chore.id)

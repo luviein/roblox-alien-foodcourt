@@ -7,6 +7,7 @@
 local Runner = require(script.Parent.Runner)
 
 local SUITES = {
+	require(script.Parent.ChoreTests),
 	require(script.Parent.DailyTests),
 	require(script.Parent.HypeTests),
 	require(script.Parent.OfflineTests),

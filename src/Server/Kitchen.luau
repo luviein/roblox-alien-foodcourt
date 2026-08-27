@@ -605,13 +605,23 @@ function Kitchen:spawnChore()
 	local chore = ChoreDefs.roll(self.bag.rng, self.loadout.tagCounts)
 	local t = now()
 
+	-- The requirement is settled HERE and sent with the chore, rather than the
+	-- client reading the base out of ChoreDefs. It is the number a power-up
+	-- will reduce, so it has to be the server's answer -- otherwise the client
+	-- decides how much work it feels like doing.
 	self.chore = {
 		id = chore.id,
 		startedAt = t,
 		expiresAt = t + chore.duration,
+		work = ChoreDefs.workFor(chore, self.loadout.choreReduction),
 	}
 
-	self:emit({ type = "choreStarted", choreId = chore.id, expiresAt = self.chore.expiresAt })
+	self:emit({
+		type = "choreStarted",
+		choreId = chore.id,
+		expiresAt = self.chore.expiresAt,
+		work = self.chore.work,
+	})
 end
 
 -- One key clears whatever is up. Deliberately not per-chore: every letter key

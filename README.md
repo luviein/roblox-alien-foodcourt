@@ -40,7 +40,7 @@ the project builds — not something to play.
 | `Q W E R T` / `A S D F G` | add an ingredient |
 | `SPACE` | serve |
 | `X` | scrap the plate |
-| drag | chores: fling to throw it out, or scrub back and forth to clean |
+| drag | chores: five separate throws to airlock the trash, or seconds of scrubbing to clean |
 | `E` | plan the day / continue (outside service only) |
 
 Every key has an on-screen button firing the same code path, so touch works.
