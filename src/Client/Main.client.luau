@@ -194,6 +194,8 @@ refs = UI.build(playerGui, {
 		sendAction({ action = "chore" })
 	end,
 	onOpenShop = function()
+		-- Rendered on the way open, since it is no longer redrawn while shut.
+		ShopUI.render(shop, snapshot and snapshot.profile)
 		ShopUI.setOpen(shop, true)
 	end,
 	onClaimDaily = function(index)
@@ -524,13 +526,21 @@ Remotes.ShiftUpdate.OnClientEvent:Connect(function(newSnapshot)
 		Settings.apply(newSnapshot.profile.settings)
 	end
 
-	ShopUI.render(shop, newSnapshot.profile)
+	-- Panels are only redrawn while they are actually on screen.
+	--
+	-- Both of these ran on every snapshot, ten times a second, whether open or
+	-- not. The shop walks nineteen rows setting text and colours; the draft
+	-- screen is worse -- it evaluates the whole menu once PER PHASE and builds
+	-- the reason strings -- and all of it was being thrown away unseen. Each
+	-- opens by rendering itself first, so nothing is ever shown stale.
+	if ShopUI.isOpen(shop) then
+		ShopUI.render(shop, newSnapshot.profile)
+	end
 
-	-- Only worth redrawing between shifts; during service the panel is shut and
-	-- the unlocked set cannot change.
 	if newSnapshot.state == "Idle" then
-		DraftUI.seed(draft, newSnapshot.profile)
-		DraftUI.render(draft, newSnapshot.profile)
+		if DraftUI.isOpen(draft) then
+			DraftUI.render(draft, newSnapshot.profile)
+		end
 	else
 		DraftUI.setOpen(draft, false)
 	end

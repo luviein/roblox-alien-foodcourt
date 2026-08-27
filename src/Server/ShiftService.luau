@@ -210,7 +210,7 @@ local function pushSnapshot(player: Player)
 	-- open across midnight gets the new list without relogging. The cheap date
 	-- comparison guards the write: this runs at the tick rate, and marking the
 	-- profile dirty ten times a second for nothing would be silly.
-	if profile and profile.daily and profile.daily.date ~= DailyDefs.dateString() then
+	if profile and profile.daily and profile.daily.date ~= DailyDefs.todayString() then
 		DataService.update(player, function(data)
 			DailyDefs.ensureToday(data.daily)
 		end)
@@ -269,6 +269,11 @@ local function onPlayerRemoving(player: Player)
 	kitchens[player] = nil
 	actionBudget[player] = nil
 	lastIdlePush[player] = nil
+
+	-- Was leaking. Every other registry here was cleared and this one was not,
+	-- so a day's rolled conditions stayed keyed to a Player instance that had
+	-- left -- holding it, and the table, for the life of the server.
+	dayConditions[player] = nil
 end
 
 -- --------------------------------------------------------------- remotes ---

@@ -1824,17 +1824,23 @@ function UI.renderTimers(refs, snapshot)
 	-- counter has been dealt with. Saying LAST ORDERS is the difference
 	-- between "the game is finishing up" and a clock stuck on 0:00, which
 	-- reads as the thing having hung.
-	if snapshot.state == "Service" and remaining <= 0 then
-		refs.topBar.time.Text = "LAST ORDERS"
-		refs.topBar.time.TextColor3 = COLOR.warn
-		refs.topBar.timeFill.Size = UDim2.fromScale(0, 1)
-	else
-		refs.topBar.time.Text = formatTime(remaining)
-		refs.topBar.time.TextColor3 = COLOR.text
-		refs.topBar.timeFill.Size = UDim2.fromScale(
-			math.clamp(remaining / snapshot.shiftDuration, 0, 1), 1
-		)
+	local closing = snapshot.state == "Service" and remaining <= 0
+	local label = if closing then "LAST ORDERS" else formatTime(remaining)
+
+	-- Written only when it changes. This runs every FRAME, and the clock reads
+	-- the same for sixty of them in a row, so assigning unconditionally meant
+	-- fifty-nine redundant property writes a second on a label nobody saw
+	-- change. The fill bar genuinely moves every frame, so it is set every
+	-- frame.
+	if refs.topBar.time.Text ~= label then
+		refs.topBar.time.Text = label
+		refs.topBar.time.TextColor3 = if closing then COLOR.warn else COLOR.text
 	end
+
+	refs.topBar.timeFill.Size = UDim2.fromScale(
+		if closing then 0 else math.clamp(remaining / snapshot.shiftDuration, 0, 1),
+		1
+	)
 
 	-- The fry prompt counts down every frame rather than every snapshot: a
 	-- timer that visibly stutters is worse than no timer. render() leaves this

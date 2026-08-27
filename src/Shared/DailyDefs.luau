@@ -37,6 +37,24 @@ function DailyDefs.dateString(atSeconds: number?): string
 	return os.date("!%Y-%m-%d", atSeconds or os.time()) :: string
 end
 
+-- Today's stamp, memoised for a second.
+--
+-- The tick loop compares against this to spot midnight, which meant formatting
+-- a date string ten times a second for every player to answer a question whose
+-- answer changes once a day. A one second cache cannot miss a rollover by more
+-- than a second, and nothing here is that fussy.
+local cachedDate = ""
+local cachedSecond = -1
+
+function DailyDefs.todayString(): string
+	local second = os.clock() // 1
+	if second ~= cachedSecond then
+		cachedSecond = second
+		cachedDate = DailyDefs.dateString()
+	end
+	return cachedDate
+end
+
 -- ------------------------------------------------------------------ tasks --
 
 -- `mode` is how progress accumulates:
