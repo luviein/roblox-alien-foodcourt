@@ -1,15 +1,24 @@
 ---
 name: optimise
-description: Audit Alien Food Court for performance problems - work repeated per tick or per frame, redundant property writes, per-player leaks, wasted replication - and fix the ones that are real. Use when asked to optimise, check performance, look for waste, or investigate lag or memory growth.
+description: Audit Alien Food Court for waste and fix it - both performance (work repeated per tick or per frame, redundant property writes, per-player leaks) and simplification (duplicated logic, repeated literals, functions called several times in one scope). Covers BOTH unless told otherwise. Use when asked to optimise, simplify, clean up, check performance, look for waste, or investigate lag or memory growth.
 ---
 
 # Optimising Alien Food Court
 
+Two passes, and **do both unless told otherwise**: performance waste, and code
+that is more complicated than it needs to be. They are the same job — each is
+work that should not be there — and the second is usually what causes the first.
+
 ## The bar
 
-**An optimisation that changes behaviour is not an optimisation, it is a
-rewrite.** If a change needs the test suite re-read to be sure it was safe, it
-does not belong in an optimisation pass — raise it separately.
+**A change that alters behaviour is not an optimisation, it is a rewrite.** If a
+change needs the test suite re-read to be sure it was safe, it does not belong
+in this pass — raise it separately.
+
+That applies to simplification too. Collapsing three copies of a loop into one
+helper is safe. "Simplifying" a rule because it looks convoluted is not — the
+convoluted ones here are usually load-bearing, and the comment above them says
+why. Read it before touching it.
 
 Do not guess. Read the hot paths and show why something is hot before touching
 it. A number in a commit message that nobody measured is worse than no number.
@@ -83,6 +92,52 @@ and it is on the list, but changing it means changing what the client can
 assume is present — which is a rewrite, not an optimisation. See "Known and
 deliberately not done".
 
+## The simplification pass
+
+Same principle, different symptom: something written more times than it needed
+to be. Ranked, again, by what has actually been found here.
+
+### 1. The same loop, written more than once
+
+`pushRecent` exists because "insert at the front, trim to a window" was written
+out **three times** — recent earnings once, recent menus twice. Every copy had
+to agree about which end is newest, and one of them being written backwards is
+a bug nothing would catch.
+
+Grep for repeated `table.insert(..., 1, ...)`, matching `while #x > n do` loops,
+and any pair of blocks that differ only in the variable name.
+
+### 2. The same table literal, written twice
+
+`freshStats` exists because the zeroed stats table appeared in both
+`Kitchen.new` and `Kitchen:startShift`. Adding `chores` meant editing both, and
+forgetting the second would have left a stat that counted correctly on the first
+shift of a session and carried over silently on every one after.
+
+A literal that must be kept in step with another literal is a function.
+
+### 3. The same function called repeatedly in one scope
+
+`unlockedMenu(profile)` was called three times inside `loadoutFor`, each call
+rebuilding the same list. Hoist it. This is a simplification and a small
+performance win at once, which is the usual pattern.
+
+### 4. A comment explaining that two things match
+
+The strongest single tell in this codebase. `loadoutFor` had a comment saying
+one call "was built from the same list above" — which is the code asking to be
+one call rather than two. When a comment exists to reassure the reader that two
+places agree, delete the second place instead.
+
+### 5. Dead configuration
+
+`OFFLINE_MIN_SECONDS` was a knob that disagreed with the arithmetic around it
+and created a silent dead zone. If two numbers have to be consistent, derive one
+from the other rather than documenting the relationship.
+
+Grep `Config.` usage for anything defined and never read, or read in exactly one
+place that could compute it.
+
 ## Known and deliberately not done
 
 Do not "fix" these without asking. Each is a considered trade.
@@ -99,6 +154,13 @@ Do not "fix" these without asking. Each is a considered trade.
 - **Everything visual is client-side and never replicated.** `Scene`, `Alien`,
   `Customers`, `FoodStack`, `Face`, `NpcAnimator`. Deleting any of it changes no
   gameplay outcome. It is not on the server's budget.
+- **The long comments are not clutter.** `Config.luau` explains why each number
+  is what it is, and most of those numbers were set against a real measured
+  shift. Deleting the reasoning is how the next person re-derives it wrongly.
+  Shortening a comment is not a simplification.
+- **`debugFinishShift` and `endShiftNow` look redundant and are not.** One fills
+  in a plausible result, the other moves the clock so the ordinary end-of-shift
+  path runs. Read both comments before merging them.
 
 ## Verifying
 

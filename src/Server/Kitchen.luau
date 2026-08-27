@@ -42,6 +42,24 @@ local function choreGap(rng: Random): number
 	return rng:NextNumber(Config.CHORE_GAP[1], Config.CHORE_GAP[2])
 end
 
+-- A shift's tally, zeroed.
+--
+-- One definition rather than two identical literals in Kitchen.new and
+-- startShift. Adding `chores` meant editing both, and forgetting the second
+-- would have left a stat that counted correctly on the first shift of a
+-- session and silently carried over on every one after it.
+local function freshStats()
+	return {
+		served = 0,
+		perfect = 0,
+		good = 0,
+		sloppy = 0,
+		failed = 0,
+		expired = 0,
+		chores = 0,
+	}
+end
+
 function Kitchen.new(participants: { Player })
 	local self = setmetatable({}, Kitchen)
 
@@ -60,10 +78,7 @@ function Kitchen.new(participants: { Player })
 	self.tips = 0
 	self.combo = 0
 	self.bestCombo = 0
-	self.stats = {
-		served = 0, perfect = 0, good = 0, sloppy = 0, failed = 0, expired = 0,
-		chores = 0,
-	}
+	self.stats = freshStats()
 
 	self.shiftStartedAt = 0
 	self.shiftEndsAt = 0
@@ -121,10 +136,7 @@ function Kitchen:startShift(loadout)
 	self.tips = 0
 	self.combo = 0
 	self.bestCombo = 0
-	self.stats = {
-		served = 0, perfect = 0, good = 0, sloppy = 0, failed = 0, expired = 0,
-		chores = 0,
-	}
+	self.stats = freshStats()
 	self.shiftStartedAt = t
 	self.shiftEndsAt = t + loadout.shiftDuration
 	self.nextSpawnAt = t + 1.0   -- brief beat before the first ticket
@@ -162,15 +174,14 @@ function Kitchen:debugFinishShift()
 	local served = 8
 	local perfect = 6
 
-	self.stats = {
-		served = served,
-		perfect = perfect,
-		good = served - perfect,
-		sloppy = 0,
-		failed = 0,
-		expired = 0,
-		chores = 2,
-	}
+	-- Built from freshStats and overridden, rather than listed out again, so a
+	-- stat added later appears here zeroed instead of being missing entirely.
+	local stats = freshStats()
+	stats.served = served
+	stats.perfect = perfect
+	stats.good = served - perfect
+	stats.chores = 2
+	self.stats = stats
 	self.bestCombo = served
 	self.tips = served * (self.loadout.tipPerOrder or 0)
 

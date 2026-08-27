@@ -38,6 +38,18 @@ local lastIdlePush: { [Player]: number } = {}
 -- clears it and is defined long before conditionsFor fills it.
 local dayConditions: { [Player]: any } = {}
 
+-- Push onto a newest-first list and trim it to a window.
+--
+-- This loop existed three times over -- recent earnings once, recent menus
+-- twice, identically -- and all three had to agree about which end is newest.
+-- One of them being written the other way round is a bug nothing would catch.
+local function pushRecent<T>(list: { T }, entry: T, keep: number)
+	table.insert(list, 1, entry)
+	while #list > keep do
+		table.remove(list)
+	end
+end
+
 -- Whether anything is currently counting down for this player.
 local function boostRunning(player: Player): boolean
 	local profile = DataService.get(player)
@@ -76,10 +88,7 @@ local function settleShift(player: Player, kitchen)
 		-- Newest first, trimmed. This average is what the understudy is paid a
 		-- fraction of, so it has to be recorded here, on the way out of a real
 		-- shift.
-		table.insert(data.recentEarnings, 1, earned)
-		while #data.recentEarnings > Config.OFFLINE_RECENT_SHIFTS do
-			table.remove(data.recentEarnings)
-		end
+		pushRecent(data.recentEarnings, earned, Config.OFFLINE_RECENT_SHIFTS)
 
 		-- Every ordinary shift counts towards the daily tasks. ensureToday
 		-- first, so a shift finished just after midnight lands on the new day's
@@ -338,8 +347,15 @@ end
 -- is dropped here rather than trusted.
 local function loadoutFor(player: Player, chosen: { string }?)
 	local profile = DataService.get(player)
+
+	-- Built once. This was called three separate times down this function,
+	-- each rebuilding the same list, and the third had a comment explaining
+	-- that it matched the first -- which is a sign it should not have been a
+	-- second call at all.
+	local unlocked = unlockedMenu(profile)
+
 	local allowed = {}
-	for _, dishId in unlockedMenu(profile) do
+	for _, dishId in unlocked do
 		allowed[dishId] = true
 	end
 
@@ -357,7 +373,7 @@ local function loadoutFor(player: Player, chosen: { string }?)
 	-- Nothing draftable came through: fall back to whatever they own so a
 	-- malformed request cannot produce a shift with no dishes at all.
 	if #menu == 0 then
-		for _, dishId in unlockedMenu(profile) do
+		for _, dishId in unlocked do
 			if #menu < slots then
 				table.insert(menu, dishId)
 			end
@@ -372,9 +388,7 @@ local function loadoutFor(player: Player, chosen: { string }?)
 	local conditions = conditionsFor(player)
 
 	-- The unlocked count and slot count go in so staleness can cap itself and
-	-- always leave a draftable fresh menu. `allowed` was built from the same
-	-- list above, so #unlocked is what the player can actually choose from.
-	local unlocked = unlockedMenu(profile)
+	-- always leave a draftable fresh menu.
 	local stale = HypeDefs.staleSet(
 		profile and profile.recentMenus, #unlocked, slots)
 	local upgrades = (profile and profile.upgrades) or {}
@@ -438,11 +452,7 @@ local function onStartShift(player: Player, chosenMenu: any)
 		-- Today's menu becomes tomorrow's repeat penalty. Recorded at the
 		-- START of the shift so quitting halfway does not dodge it.
 		DataService.update(player, function(data)
-			-- Newest first, trimmed to the staleness window.
-			table.insert(data.recentMenus, 1, table.clone(loadout.menu))
-			while #data.recentMenus > Config.MENU_STALE_DAYS do
-				table.remove(data.recentMenus)
-			end
+			pushRecent(data.recentMenus, table.clone(loadout.menu), Config.MENU_STALE_DAYS)
 		end)
 	end
 
@@ -568,10 +578,7 @@ local function onStationAction(player: Player, payload: any)
 			-- never make anything stale and staleness could not be tested by
 			-- the one command built for skipping forward.
 			DataService.update(player, function(data)
-				table.insert(data.recentMenus, 1, table.clone(loadout.menu))
-				while #data.recentMenus > Config.MENU_STALE_DAYS do
-					table.remove(data.recentMenus)
-				end
+				pushRecent(data.recentMenus, table.clone(loadout.menu), Config.MENU_STALE_DAYS)
 			end)
 
 			kitchen:debugFinishShift()
